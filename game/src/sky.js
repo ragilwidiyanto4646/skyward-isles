@@ -39,11 +39,11 @@ const PRESETS = {
     exposure: 0.95
   },
   cloudy: {
-    top: 0x7d93a8, mid: 0xa7b8c4, horizon: 0xc3cfd8,
-    fogNear: 600, fogFar: 3400,
-    sunColor: 0xdfe6ea, sunIntensity: 0.65, sunPos: [-600, 1500, -400],
-    hemiSky: 0xc3cfd8, hemiGround: 0x6a6a62, hemiIntensity: 0.85,
-    cloudColor: 0xaebbc4, cloudCount: 150,
+    top: 0x7d93a8, mid: 0xa7b8c4, horizon: 0xcad5dd,
+    fogNear: 900, fogFar: 4600,
+    sunColor: 0xdfe6ea, sunIntensity: 0.85, sunPos: [-600, 1500, -400],
+    hemiSky: 0xcad5dd, hemiGround: 0x6a6a62, hemiIntensity: 0.95,
+    cloudColor: 0xc2ced6, cloudCount: 150,
     spriteScale: 520, spriteOpacity: 0, spriteVisible: false,
     exposure: 1.05
   }
@@ -117,11 +117,18 @@ function makeGlowTexture() {
 function createClouds() {
   // Cluster centers: the previous main deck and high layer, plus extra
   // mid-altitude clusters so the cloudy preset has full coverage.
+  // Layout notes (Phase 3 cloud notes): the low deck was raised to
+  // y 500-560 so clusters sit above typical cruise altitude instead of
+  // blocking the landscape, and the cluster that used to sit dead ahead
+  // of the southern panorama/aerial viewpoints (300, 560, 1600) moved to
+  // the south-west flank (-1400, 660, 1800) so no single cluster fills
+  // the frame when the camera is near it. Every center keeps roughly
+  // 700+ units from its neighbours for an even spread.
   const clusters = [
     // main deck
-    [-900, 420, -600], [700, 480, -1200], [1500, 400, 300], [-1600, 520, 800],
-    [300, 560, 1600], [-500, 460, 1400], [1900, 540, -900], [-2100, 440, -1400],
-    [100, 500, -2000], [1200, 620, 1400],
+    [-900, 520, -600], [700, 540, -1200], [1500, 500, 300], [-1600, 520, 800],
+    [-1400, 660, 1800], [-650, 560, 1350], [1900, 540, -900], [-2100, 520, -1400],
+    [100, 540, -2000], [1200, 620, 1400],
     // high layer
     [-1300, 760, -300], [900, 820, -1600], [200, 780, 900],
     [-700, 860, 1900], [1700, 720, 1100], [-1900, 800, -1100],
@@ -155,10 +162,10 @@ function createClouds() {
   const clusterMatrices = clusters.map(([cx, cy, cz], ci) => {
     const list = [];
     for (let i = 0; i < perCluster[ci]; i++) {
-      const ox = (rng() * 2 - 1) * 115;
-      const oy = (rng() * 2 - 1) * 18;
-      const oz = (rng() * 2 - 1) * 70;
-      const base = 48 + rng() * 40;             // puff radius 48..88
+      const ox = (rng() * 2 - 1) * 80;
+      const oy = (rng() * 2 - 1) * 12;
+      const oz = (rng() * 2 - 1) * 50;
+      const base = 36 + rng() * 28;             // puff radius 36..64 (~25% smaller)
       const sx = base * (1.0 + rng() * 0.5);
       const sy = base * (0.45 + rng() * 0.15);  // flattened: x0.45..0.60
       const sz = base * (0.75 + rng() * 0.4);
