@@ -11,10 +11,19 @@ export function createInput() {
     dragging: false,
     viewTogglePressed: false,
     pausePressed: false,
-    restartPressed: false
+    restartPressed: false,
+    // Free-camera orbit: when orbitMode is on (set by main.js while the free
+    // camera is active), mouse drags and wheel turns are reported as orbit
+    // deltas instead of flight pitch/roll. poll() publishes one frame's
+    // worth of deltas in orbitDX/orbitDY/orbitZoom, then clears them.
+    orbitMode: false,
+    orbitDX: 0,
+    orbitDY: 0,
+    orbitZoom: 0
   };
 
   let lastX = 0, lastY = 0;
+  let pendingOrbitDX = 0, pendingOrbitDY = 0, pendingOrbitZoom = 0;
 
   window.addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
@@ -39,9 +48,17 @@ export function createInput() {
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     lastX = e.clientX; lastY = e.clientY;
+    if (state.orbitMode) {
+      pendingOrbitDX += dx;
+      pendingOrbitDY += dy;
+      return;
+    }
     state.mouseRoll = clamp(state.mouseRoll + dx * 0.012, -1, 1);
     state.mousePitch = clamp(state.mousePitch - dy * 0.012, -1, 1);
   });
+  window.addEventListener("wheel", (e) => {
+    if (state.orbitMode) pendingOrbitZoom += Math.sign(e.deltaY);
+  }, { passive: true });
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
@@ -63,6 +80,11 @@ export function createInput() {
     }
     state.pitchInput = clamp(pitch, -1, 1);
     state.rollInput = clamp(roll, -1, 1);
+    // Publish this frame's free-camera orbit deltas, then clear them.
+    state.orbitDX = pendingOrbitDX;
+    state.orbitDY = pendingOrbitDY;
+    state.orbitZoom = pendingOrbitZoom;
+    pendingOrbitDX = 0; pendingOrbitDY = 0; pendingOrbitZoom = 0;
   };
 
   state.consumeViewToggle = function () {

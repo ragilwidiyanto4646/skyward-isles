@@ -165,10 +165,22 @@ function stageShot(name) {
     flight.pitch = -0.06; flight.roll = 0.08;
     flight.speed = 70; flight.throttle = 0.8; flight.onGround = false;
     cameras.setMode("chase");
+  } else if (name === "free-side" || name === "free-front") {
+    // Free-orbit camera at a fixed angle, for checking the airframe shape:
+    // side profile, or front-quarter showing nose, wing taper and gear.
+    const ring = RING_COURSE[0];
+    flight.position.set(ring.x + 40, ring.y - 6, ring.z + 330);
+    flight.heading = 0;
+    flight.pitch = 0.02; flight.roll = 0;
+    flight.speed = 62; flight.throttle = 0.72; flight.onGround = false;
+    cameras.setMode("free");
+    if (name === "free-side") cameras.setFreeOrbit(Math.PI / 2, 0.12, 24);
+    else cameras.setFreeOrbit(Math.PI - 0.7, 0.18, 24);
   }
   applyToMesh(flight, plane);
   cameras.update(camera, flight, plane, 1, true);
   hud.update(flight, mission, cameras.mode, 0);
+  if (cameras.mode === "free") $("viewVal").textContent = "FREE CAM";
   if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
   renderer.render(scene, camera);
   // A few more frames so instanced meshes and fog settle, then signal ready.
@@ -178,6 +190,7 @@ function stageShot(name) {
     spinPropeller(plane, flight.throttle, 0.016);
     cameras.update(camera, flight, plane, 0.016, true);
     hud.update(flight, mission, cameras.mode, 0);
+    if (cameras.mode === "free") $("viewVal").textContent = "FREE CAM";
     if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
     renderer.render(scene, camera);
     frames++;
@@ -209,12 +222,14 @@ function loop(now) {
   }
 
   if (gameState === "flying" && mission) {
+    input.orbitMode = cameras.mode === "free";
     updateFlight(flight, input, dt);
     updateMission(mission, flight, dt, hud);
     applyToMesh(flight, plane);
     spinPropeller(plane, flight.throttle, dt);
-    cameras.update(camera, flight, plane, dt);
+    cameras.update(camera, flight, plane, dt, false, input);
     hud.update(flight, mission, cameras.mode, dt);
+    if (cameras.mode === "free") $("viewVal").textContent = "FREE CAM";
     if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
     if (mission.finished || mission.failed) endMission();
   } else if (gameState === "title") {
