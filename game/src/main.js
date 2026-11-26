@@ -138,7 +138,9 @@ function stageShot(name) {
   mission.elapsed = 74;
   mission.fuel = 82;
   mission.objective = "Fly through the golden ring!";
-  mission.detail = "Ring 1 of 10 — follow the gold ring · 330 m";
+  // No hard-coded distance here: the HUD computes the live distance to the
+  // next ring from the staged position (see hud.js updateMissionMeta).
+  mission.detail = "Ring 1 of 10 — follow the gold ring";
   buildMissionObjects(scene, mission);
   hud.show();
   hideScreens();
@@ -151,6 +153,7 @@ function stageShot(name) {
     flight.heading = 0; // facing north (-Z) toward the ring
     flight.pitch = 0.02; flight.roll = -0.12;
     flight.speed = 62; flight.throttle = 0.72; flight.onGround = false;
+    flight.verticalSpeed = 1.2; // gentle climb, matches the slight nose-up pitch
     cameras.setMode("chase");
   } else if (name === "cockpit") {
     // On final approach to Home Runway, panel lit, strip ahead below.
@@ -158,6 +161,7 @@ function stageShot(name) {
     flight.heading = -0.04;
     flight.pitch = -0.22; flight.roll = 0.03;
     flight.speed = 48; flight.throttle = 0.45; flight.onGround = false;
+    flight.verticalSpeed = -10.5; // descent on approach, matches pitch/speed
     cameras.setMode("cockpit");
     refreshCockpit();
   } else if (name === "runway") {
@@ -208,7 +212,6 @@ function stageShot(name) {
   applyToMesh(flight, plane);
   cameras.update(camera, flight, plane, 1, true);
   hud.update(flight, mission, cameras.mode, 0);
-  if (cameras.mode === "free") $("viewVal").textContent = "FREE CAM";
   if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
   renderer.render(scene, camera);
   // A few more frames so instanced meshes and fog settle, then signal ready.
@@ -218,7 +221,6 @@ function stageShot(name) {
     spinPropeller(plane, flight.throttle, 0.016);
     cameras.update(camera, flight, plane, 0.016, true);
     hud.update(flight, mission, cameras.mode, 0);
-    if (cameras.mode === "free") $("viewVal").textContent = "FREE CAM";
     if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
     updateWater(performance.now() / 1000);
     renderer.render(scene, camera);
@@ -265,7 +267,6 @@ function loop(now) {
     spinPropeller(plane, flight.throttle, dt);
     cameras.update(camera, flight, plane, dt, false, input);
     hud.update(flight, mission, cameras.mode, dt);
-    if (cameras.mode === "free") $("viewVal").textContent = "FREE CAM";
     if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
     if (mission.finished || mission.failed) endMission();
   } else if (gameState === "title") {

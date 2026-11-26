@@ -8,37 +8,142 @@
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0b1e33; font-family: "Segoe UI", system-ui, sans-serif; }
   #app { position: fixed; inset: 0; }
   canvas { display: block; }
-  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; }
-  .panel { background: rgba(8, 24, 44, 0.72); border: 1px solid rgba(255,255,255,0.25); border-radius: 10px; }
-  #instruments { position: absolute; left: 14px; bottom: 14px; padding: 10px 14px; min-width: 240px; }
-  #instruments .row { display: flex; justify-content: space-between; gap: 18px; font-size: 15px; line-height: 1.5; }
-  #instruments .big { font-size: 30px; font-weight: 800; line-height: 1.15; }
-  #instruments .label { color: #9fd8ff; font-size: 12px; letter-spacing: 0.12em; }
-  #compassWrap { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 60vw; padding: 6px 10px; text-align: center; }
-  #compass { width: 100%; height: 34px; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; font-variant-numeric: tabular-nums; }
+  .panel { background: rgba(8, 24, 44, 0.72); border: 1px solid rgba(255,255,255,0.25); border-radius: 10px; box-sizing: border-box; }
+  .label { color: #9fd8ff; font-size: 12px; letter-spacing: 0.12em; }
+
+  /* --- Mission box (top-left) --- */
   #missionBox { position: absolute; top: 12px; left: 14px; padding: 10px 14px; max-width: 340px; }
   #missionTitle { font-size: 18px; font-weight: 800; color: #ffd75e; }
   #missionText { font-size: 15px; margin-top: 2px; }
-  #scoreBox { position: absolute; top: 12px; right: 14px; padding: 10px 14px; text-align: right; }
-  #scoreVal { font-size: 30px; font-weight: 800; color: #ffd75e; }
+  #missionSub { font-size: 14px; color: #9fd8ff; margin-top: 1px; }
+  #missionMeta { font-size: 15px; font-weight: 700; color: #ffd75e; margin-top: 4px; }
+
+  /* --- Compass strip (top-center) --- */
+  #compassWrap { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 60vw; padding: 6px 10px; text-align: center; }
+  #compass { width: 100%; height: 34px; }
+  #hdgLine { font-size: 14px; margin-top: 2px; }
+
+  /* --- Score + timer (top-right) --- */
+  #scoreBox { position: absolute; top: 12px; right: 14px; padding: 10px 14px; text-align: right; min-width: 96px; }
+  #scoreVal { font-size: 30px; font-weight: 800; color: #ffd75e; line-height: 1.1; }
+  #timerVal { font-size: 15px; }
+
+  /* --- Instruments (bottom-left) --- */
+  #instruments { position: absolute; left: 14px; bottom: 14px; padding: 10px 14px; min-width: 280px; }
+  #instruments .row { display: flex; justify-content: space-between; align-items: baseline; gap: 18px; font-size: 15px; line-height: 1.5; }
+  #instruments .big { font-size: 30px; font-weight: 800; line-height: 1.15; }
+  #instruments .mid { font-size: 19px; font-weight: 700; }
+  #fuelBarOuter, #throttleBarOuter { height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; margin-top: 4px; overflow: hidden; }
+  #fuelBar { height: 100%; width: 100%; background: #ffb340; }
+  #throttleBar { height: 100%; width: 0%; background: #57e6a9; }
+  .gearDot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #2fbf71; box-shadow: 0 0 6px #2fbf71; margin-right: 6px; vertical-align: baseline; }
+  #viewRow { margin-top: 6px; font-size: 13px; }
+
+  /* --- Artificial horizon (bottom-right) --- */
   #horizonWrap { position: absolute; right: 14px; bottom: 14px; padding: 8px; text-align: center; }
   #horizon { width: 150px; height: 150px; border-radius: 50%; }
-  #fuelBarOuter { height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; margin-top: 4px; overflow: hidden; }
-  #fuelBar { height: 100%; width: 100%; background: #ffb340; }
-  #throttleBarOuter { height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; margin-top: 4px; overflow: hidden; }
-  #throttleBar { height: 100%; width: 0%; background: #57e6a9; }
-  #centerMsg { position: absolute; left: 50%; top: 38%; transform: translate(-50%,-50%); font-size: 34px; font-weight: 800; color: #ffd75e; text-shadow: 0 2px 10px rgba(0,0,0,0.7); text-align: center; }
+  #horizonLabel { font-size: 12px; color: #9fd8ff; letter-spacing: 0.12em; margin-top: 4px; }
+
+  #centerMsg { position: absolute; left: 50%; top: 38%; transform: translate(-50%,-50%); font-size: 34px; font-weight: 800; color: #ffd75e; text-shadow: 0 2px 10px rgba(0,0,0,0.7); text-align: center; max-width: 92vw; }
+
+  /* --- Cockpit view: compact layout ---
+     The 3D panel is live in cockpit view, so the DOM HUD steps aside:
+     the compass drops below the overhead panel (clearing its switches),
+     the instruments shrink to a narrow strip that stops short of the
+     standby gauges, and the DOM horizon hides (the 3D PFD has attitude). */
+  #hud.cockpit #compassWrap { top: 148px; width: 330px; padding: 4px 8px; }
+  #hud.cockpit #instruments { min-width: 0; width: 196px; padding: 8px 10px; }
+  #hud.cockpit #instruments .big { font-size: 20px; }
+  #hud.cockpit #instruments .mid { font-size: 15px; }
+  #hud.cockpit #instruments .row { font-size: 13px; line-height: 1.45; gap: 10px; }
+  #hud.cockpit #fuelBarOuter, #hud.cockpit #throttleBarOuter { height: 8px; }
+  #hud.cockpit .keyHints { display: none; }
+  #hud.cockpit #horizonWrap { display: none; }
+  #hud.cockpit #missionBox { max-width: 272px; padding: 8px 11px; }
+  #hud.cockpit #missionTitle { font-size: 16px; }
+  #hud.cockpit #missionText { font-size: 13.5px; }
+  #hud.cockpit #missionSub { font-size: 12.5px; }
+  #hud.cockpit #missionMeta { font-size: 13.5px; }
+  #hud.cockpit #scoreBox { padding: 8px 11px; min-width: 84px; }
+  #hud.cockpit #scoreVal { font-size: 24px; }
+  #hud.cockpit #timerVal { font-size: 13.5px; }
+
+  /* --- Screens (title / end / pause) --- */
   .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(4, 14, 28, 0.55); z-index: 10; }
-  .card { background: rgba(8, 24, 44, 0.92); border: 1px solid rgba(255,255,255,0.3); border-radius: 16px; padding: 28px 34px; color: #fff; max-width: 560px; width: calc(100% - 40px); text-align: center; }
+  .card { background: rgba(8, 24, 44, 0.92); border: 1px solid rgba(255,255,255,0.3); border-radius: 16px; padding: 28px 34px; color: #fff; max-width: 560px; width: calc(100% - 40px); text-align: center; box-sizing: border-box; max-height: calc(100% - 32px); overflow-y: auto; }
   .card h1 { margin: 0 0 6px; font-size: 42px; letter-spacing: 0.06em; color: #ffd75e; }
   .card h2 { margin: 0 0 10px; font-size: 30px; color: #ffd75e; }
   .card p { font-size: 16px; line-height: 1.5; }
   .card .controls { text-align: left; font-size: 15px; line-height: 1.7; margin: 14px auto; max-width: 420px; }
-  .btn { display: block; width: 100%; margin: 8px 0; padding: 13px; font-size: 18px; font-weight: 700; border: 0; border-radius: 10px; background: #ff9d2e; color: #1a1200; cursor: pointer; }
+  .btn { display: block; width: 100%; margin: 8px 0; padding: 13px; font-size: 18px; font-weight: 700; border: 0; border-radius: 10px; background: #ff9d2e; color: #1a1200; cursor: pointer; box-sizing: border-box; }
   .btn:hover { background: #ffb340; }
   .btn.alt { background: #2e7fd9; color: #fff; }
   .hidden { display: none !important; }
   #cockpitFrame { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+
+  /* --- Small screens: shrink and reflow so nothing is cut off --- */
+  @media (max-width: 900px) {
+    #compassWrap { width: 340px; max-width: 52vw; }
+    #missionBox { max-width: 280px; }
+    #instruments .big { font-size: 24px; }
+    #scoreVal { font-size: 24px; }
+    #horizon { width: 110px; height: 110px; }
+    #centerMsg { font-size: 26px; }
+  }
+  @media (max-width: 600px) {
+    .label { font-size: 11px; letter-spacing: 0.06em; }
+    #missionBox { top: 8px; left: 8px; max-width: 54vw; padding: 8px 10px; }
+    #missionTitle { font-size: 15px; }
+    #missionText { font-size: 13px; }
+    #missionSub { font-size: 12px; }
+    #missionMeta { font-size: 13px; }
+    #scoreBox { top: 8px; right: 8px; padding: 8px 10px; min-width: 72px; }
+    #scoreVal { font-size: 20px; }
+    #timerVal { font-size: 13px; }
+    #compassWrap { top: 122px; width: 86vw; max-width: 86vw; padding: 4px 8px; }
+    #hud.cockpit #compassWrap { top: 150px; width: 86vw; }
+    #instruments { left: 8px; bottom: 8px; min-width: 0; width: 46vw; max-width: 216px; padding: 8px 10px; }
+    #instruments .big { font-size: 19px; }
+    #instruments .mid { font-size: 15px; }
+    #instruments .row { font-size: 12.5px; gap: 8px; }
+    #hud.cockpit #instruments { width: 46vw; max-width: 200px; }
+    .keyHints { display: none; }
+    #horizonWrap { right: 8px; bottom: 8px; padding: 6px; }
+    #horizon { width: 84px; height: 84px; }
+    #centerMsg { font-size: 22px; top: 34%; }
+    .card { padding: 20px 18px; }
+    .card h1 { font-size: 30px; }
+    .card h2 { font-size: 24px; }
+    .card p, .card .controls { font-size: 14px; }
+    .btn { font-size: 16px; padding: 11px; }
+  }
+  /* Short landscape (e.g. 800x450): compress vertically. */
+  @media (max-height: 500px) {
+    #missionBox { top: 8px; left: 8px; padding: 7px 10px; max-width: 270px; }
+    #missionTitle { font-size: 15px; }
+    #missionText { font-size: 13px; }
+    #missionSub { font-size: 12px; }
+    #missionMeta { font-size: 13px; margin-top: 2px; }
+    #scoreBox { top: 8px; right: 8px; padding: 7px 10px; }
+    #scoreVal { font-size: 20px; }
+    #timerVal { font-size: 13px; }
+    #compassWrap { top: 8px; width: 320px; padding: 4px 8px; }
+    #hud.cockpit #compassWrap { top: 96px; width: 300px; }
+    #instruments { left: 8px; bottom: 8px; min-width: 0; width: 216px; padding: 7px 10px; }
+    #instruments .big { font-size: 19px; }
+    #instruments .mid { font-size: 14px; }
+    #instruments .row { font-size: 12.5px; line-height: 1.4; gap: 8px; }
+    #fuelBarOuter, #throttleBarOuter { height: 8px; }
+    #hud.cockpit #instruments { width: 190px; }
+    #horizonWrap { right: 8px; bottom: 8px; padding: 6px; }
+    #horizon { width: 88px; height: 88px; }
+    #centerMsg { font-size: 22px; }
+    .card { padding: 16px 20px; }
+    .card h1 { font-size: 28px; }
+    .card p, .card .controls { font-size: 13.5px; line-height: 1.45; }
+    .btn { font-size: 15px; padding: 9px; margin: 6px 0; }
+  }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.min.js" } }
@@ -51,28 +156,31 @@
   <div id="missionBox" class="panel">
     <div id="missionTitle">RING RUN</div>
     <div id="missionText">Fly through the glowing rings!</div>
-    <div id="missionSub" style="font-size:14px;color:#9fd8ff"></div>
+    <div id="missionSub"></div>
+    <div id="missionMeta"><span id="ringVal">RING 1/10</span> · <span id="distVal">—</span></div>
   </div>
   <div id="compassWrap" class="panel">
     <canvas id="compass" width="420" height="34"></canvas>
-    <div style="font-size:14px">HDG <span id="hdgVal">000</span>&deg;</div>
+    <div id="hdgLine">HDG <span id="hdgVal">000</span>&deg;</div>
   </div>
   <div id="scoreBox" class="panel">
-    <div style="font-size:12px;letter-spacing:0.12em;color:#9fd8ff">SCORE</div>
+    <div class="label">SCORE</div>
     <div id="scoreVal">0</div>
-    <div id="timerVal" style="font-size:15px">0:00</div>
+    <div id="timerVal">0:00</div>
   </div>
   <div id="instruments" class="panel">
     <div class="row"><span class="label">ALTITUDE</span><span class="big"><span id="altVal">0</span> ft</span></div>
     <div class="row"><span class="label">AIRSPEED</span><span class="big"><span id="spdVal">0</span> kt</span></div>
+    <div class="row"><span class="label">VERT SPEED</span><span class="mid"><span id="vsiVal">+0</span> fpm</span></div>
     <div class="row"><span>THROTTLE <span id="thrVal">0</span>%</span><span>FUEL <span id="fuelVal">100</span>%</span></div>
     <div id="throttleBarOuter"><div id="throttleBar"></div></div>
     <div id="fuelBarOuter"><div id="fuelBar"></div></div>
-    <div class="row" style="margin-top:6px"><span id="viewVal">CHASE CAM</span><span>C view &middot; P pause &middot; R restart &middot; T sky</span></div>
+    <div class="row"><span class="label">GEAR</span><span><span class="gearDot"></span>FIXED</span></div>
+    <div class="row" id="viewRow"><span id="viewVal">CHASE CAM</span><span class="keyHints">C view &middot; P pause &middot; R restart &middot; T sky</span></div>
   </div>
   <div id="horizonWrap" class="panel">
     <canvas id="horizon" width="150" height="150"></canvas>
-    <div style="font-size:12px;color:#9fd8ff">ATTITUDE</div>
+    <div id="horizonLabel">ATTITUDE</div>
   </div>
   <div id="centerMsg"></div>
 </div>
