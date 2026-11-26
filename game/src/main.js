@@ -1,7 +1,7 @@
 // main.js — boot, renderer, game loop, screens, screenshot staging.
 import * as THREE from "three";
 import { createSky } from "./sky.js";
-import { initTerrainSeed, buildTerrain, heightAt, RUNWAYS } from "./terrain.js";
+import { initTerrainSeed, buildTerrain, heightAt, RUNWAYS, updateWater } from "./terrain.js";
 import { buildAircraft, spinPropeller } from "./aircraft.js";
 import { createFlightState, updateFlight, applyToMesh, resetFlight } from "./flight.js";
 import { createCameras } from "./camera.js";
@@ -192,6 +192,7 @@ function stageShot(name) {
     hud.update(flight, mission, cameras.mode, 0);
     if (cameras.mode === "free") $("viewVal").textContent = "FREE CAM";
     if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
+    updateWater(performance.now() / 1000);
     renderer.render(scene, camera);
     frames++;
     if (frames >= 6) window.__shotReady = true;
@@ -241,6 +242,7 @@ function loop(now) {
     camera.lookAt(flight.position.x, flight.position.y + 2, flight.position.z);
     spinPropeller(plane, 0.15, dt);
   }
+  updateWater(now / 1000);
   updateAudio();
   renderer.render(scene, camera);
 }

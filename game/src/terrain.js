@@ -56,6 +56,29 @@ export function initTerrainSeed(seed) {
   noiseFn = makeNoise(mulberry32(seed * 7919 + 13));
 }
 
+// Water mesh state, filled in by buildTerrain so updateWater can animate
+// the surface without rebuilding geometry.
+let waterMesh = null;
+let waterBase = null;
+let waterMat = null;
+
+// Gentle two-sine wave field on the water plane plus a slow shininess
+// shimmer for sun glitter. Normals are left alone to keep it cheap.
+export function updateWater(timeSeconds) {
+  if (!waterMesh) return;
+  const pos = waterMesh.geometry.attributes.position;
+  const arr = pos.array;
+  const t = timeSeconds;
+  for (let i = 0; i < pos.count; i++) {
+    const x = waterBase[i * 3];
+    const z = waterBase[i * 3 + 2];
+    arr[i * 3 + 1] = 0.18 * Math.sin(x * (Math.PI * 2 / 200) + t * 0.6)
+      + 0.12 * Math.sin(z * (Math.PI * 2 / 110) + t * 0.9);
+  }
+  pos.needsUpdate = true;
+  waterMat.shininess = 90 + Math.sin(t * 0.7) * 18;
+}
+
 // Raw island height before runway flattening. Three noise octaves plus a
 // ridged component (1-|n|) give hills and crests instead of one smooth dome;
 // the fine third octave adds small-scale surface texture.
@@ -71,9 +94,15 @@ function islandHeight(x, z) {
       const n2 = noiseFn(x * 0.011 + 7.3 + isl.x * 0.01, z * 0.011 - 2.1 + isl.z * 0.01);
       const n3 = noiseFn(x * 0.03 + 19.7 + isl.x * 0.01, z * 0.03 - 11.3 + isl.z * 0.01);
       const ridged = 1 - Math.abs(2 * n2 - 1);
-      const relief = ((n1 - 0.45) * 40 + (ridged - 0.55) * 34 + (n2 - 0.5) * 12
+      // Very-low-frequency swell so islands have broad contour variety
+      // (shoulders, bays, secondary rises) beyond one smooth dome.
+      const swell = (noiseFn(x * 0.0016 + isl.x * 0.01, z * 0.0016 + isl.z * 0.01) - 0.5)
+        * 18 * Math.min(1, t * 1.6);
+      // Ridged relief grows toward the high ground so crests read sharper.
+      const ridgedAmp = 34 + 16 * Math.pow(t, 1.5);
+      const relief = ((n1 - 0.45) * 40 + (ridged - 0.55) * ridgedAmp + (n2 - 0.5) * 12
         + (n3 - 0.5) * 10) * Math.min(1, t * 2.2);
-      h = Math.max(h, dome + relief - 6);
+      h = Math.max(h, dome + swell + relief - 6);
     }
   }
   return h;
@@ -124,9 +153,14 @@ function colorForHeight(h, slope, patch, fine) {
   const rock = new THREE.Color(0x9a9a9a);
   const cliff = new THREE.Color(0x8a7a68);
 
+  const duneGrass = new THREE.Color(0xa8c86e);
   const c = wetSand.clone();
-  c.lerp(sand, smoothstep(0.3, 1.4, h));          // wet band -> pale sand
-  c.lerp(grass, smoothstep(1.8, 4.5, h));         // shore -> green
+  c.lerp(sand, smoothstep(0.4, 2.2, h));          // wide wet band -> pale sand
+  // Dune-grass transition between sand and grass, speckled by fine noise
+  // so the shoreline is a broken band rather than a hard ring.
+  const speckle = (fine - 0.5) * 1.8;
+  c.lerp(duneGrass, smoothstep(1.6 + speckle * 0.5, 3.4 + speckle * 0.5, h) * 0.85);
+  c.lerp(grass, smoothstep(2.6 + speckle, 5.4 + speckle, h));  // shore -> green
   // Darker lush green in the low band just above the sand.
   c.lerp(lush, smoothstep(2.2, 5, h) * (1 - smoothstep(9, 20, h)) * 0.6);
   // Fine light/dark patchwork across the grass band.
@@ -170,20 +204,41 @@ export function buildTerrain(scene) {
   const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
   scene.add(mesh);
 
-  // Water plane (wide enough to reach the far mountain ring at ~4600).
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(11000, 11000),
-    new THREE.MeshPhongMaterial({ color: 0x1f7fb8, shininess: 90, specular: 0x99d9ff, transparent: true, opacity: 0.94 })
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = 0;
-  scene.add(water);
+  // Water plane (wide enough to reach the far mountain ring at ~4600),
+  // vertex-colored by depth so shallows read turquoise and the open sea
+  // deepens to dark blue. Segmented so updateWater can displace waves.
+  const waterGeo = new THREE.PlaneGeometry(11000, 11000, 96, 96);
+  waterGeo.rotateX(-Math.PI / 2);
+  const wPos = waterGeo.attributes.position;
+  const wColors = new Float32Array(wPos.count * 3);
+  const cPale = new THREE.Color(0x8fe0cf);
+  const cShallow = new THREE.Color(0x35aec9);
+  const cMid = new THREE.Color(0x1f7fb8);
+  const cDeep = new THREE.Color(0x155a94);
+  for (let i = 0; i < wPos.count; i++) {
+    const depth = -heightAt(wPos.getX(i), wPos.getZ(i));
+    const c = cPale.clone();
+    c.lerp(cShallow, smoothstep(0.5, 6, depth));
+    c.lerp(cMid, smoothstep(6, 14, depth));
+    c.lerp(cDeep, smoothstep(14, 30, depth));
+    wColors[i * 3] = c.r; wColors[i * 3 + 1] = c.g; wColors[i * 3 + 2] = c.b;
+  }
+  waterGeo.setAttribute("color", new THREE.BufferAttribute(wColors, 3));
+  waterMat = new THREE.MeshPhongMaterial({
+    vertexColors: true, shininess: 90, specular: 0x99d9ff,
+    transparent: true, opacity: 0.94
+  });
+  waterMesh = new THREE.Mesh(waterGeo, waterMat);
+  waterMesh.position.y = 0;
+  waterBase = new Float32Array(wPos.array);
+  scene.add(waterMesh);
 
   for (const rw of RUNWAYS) scene.add(buildRunway(rw));
   scene.add(buildTown());
   scene.add(buildAirport());
   scene.add(buildTrees());
   scene.add(buildBushes());
+  scene.add(buildRocks());
   buildMountainRings(scene);
   buildDistantIslands(scene);
   buildGroundDetail(scene);
@@ -298,12 +353,22 @@ function buildTown() {
   const group = new THREE.Group();
   const rng = mulberry32(worldSeed * 31 + 7);
   const wallColors = [0xf2e3c8, 0xe8b4a0, 0xbcd3e8, 0xf7f0dd, 0xd9e6c3];
-  const roofMat = new THREE.MeshLambertMaterial({ color: 0xb0503c });
-  const windowMat = new THREE.MeshBasicMaterial({ color: 0xffd75e });
+  const roofMats = [0xb0503c, 0x8a4a3a, 0x6b7a8c, 0xa86a44].map(
+    (c) => new THREE.MeshLambertMaterial({ color: c }));
+  const parapetMat = new THREE.MeshLambertMaterial({ color: 0x5d5648 });
+  const litMat = new THREE.MeshBasicMaterial({ color: 0xffd75e });
+  const darkGlassMat = new THREE.MeshBasicMaterial({ color: 0x33566b });
+  const winGeo = new THREE.PlaneGeometry(2.6, 2.6);
+  // Unit triangular prism for gable roofs: cylinder axis laid along X,
+  // apex up, base spanning z -0.866..0.866 at y=-0.5, ridge at y=1.
+  const gableGeo = new THREE.CylinderGeometry(1, 1, 1, 3);
+  gableGeo.rotateZ(Math.PI / 2);
+  gableGeo.rotateX(-Math.PI / 2);
+
   for (let i = 0; i < 42; i++) {
     const gx = 150 + (i % 7) * 52 + rng() * 18;
     const gz = -160 + Math.floor(i / 7) * 58 + rng() * 18;
-    const h = 14 + rng() * 30;
+    const h = 12 + Math.pow(rng(), 1.6) * 44;
     const w = 20 + rng() * 14;
     const d = 20 + rng() * 14;
     const base = heightAt(gx, gz);
@@ -313,19 +378,85 @@ function buildTown() {
     );
     body.position.set(gx, base + h / 2, gz);
     group.add(body);
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.72, 8, 4), roofMat);
-    roof.position.set(gx, base + h + 4, gz);
-    roof.rotation.y = Math.PI / 4;
-    group.add(roof);
-    // A couple of lit windows facing the runway.
-    for (let k = 0; k < 3; k++) {
-      if (rng() < 0.45) continue;
-      const win = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2), windowMat);
-      win.position.set(gx - w / 2 - 0.15, base + 6 + k * (h / 3.2), gz + (rng() - 0.5) * d * 0.6);
-      win.rotation.y = -Math.PI / 2;
-      group.add(win);
+
+    // Roof variety: pyramid, gable prism, or flat slab with parapet.
+    const roofMat = roofMats[Math.floor(rng() * roofMats.length)];
+    const roofPick = rng();
+    if (roofPick < 0.4) {
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.72, 8, 4), roofMat);
+      roof.position.set(gx, base + h + 4, gz);
+      roof.rotation.y = Math.PI / 4;
+      group.add(roof);
+    } else if (roofPick < 0.75) {
+      const longSide = Math.max(w, d) * 1.04;
+      const shortSide = Math.min(w, d) * 1.04;
+      const roofH = 5 + rng() * 3;
+      const sy = roofH / 1.5;
+      const roof = new THREE.Mesh(gableGeo, roofMat);
+      roof.scale.set(longSide, sy, shortSide / 1.732);
+      roof.position.set(gx, base + h + 0.5 * sy, gz);
+      if (d > w) roof.rotation.y = Math.PI / 2;
+      group.add(roof);
+    } else {
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(w * 1.06, 1.6, d * 1.06), parapetMat);
+      slab.position.set(gx, base + h + 0.8, gz);
+      group.add(slab);
+    }
+
+    // Windows on the west and south faces, lit or dark by chance.
+    const floors = Math.max(1, Math.floor(h / 7));
+    const cols = 2 + Math.floor(rng() * 2);
+    for (let f = 0; f < floors; f++) {
+      const wy = base + 4.5 + f * 7;
+      if (wy > base + h - 2) break;
+      for (let cIdx = 0; cIdx < cols; cIdx++) {
+        const t = cols === 1 ? 0 : cIdx / (cols - 1) - 0.5;
+        const winW = new THREE.Mesh(winGeo, rng() < 0.55 ? litMat : darkGlassMat);
+        winW.position.set(gx - w / 2 - 0.15, wy, gz + t * d * 0.62);
+        winW.rotation.y = -Math.PI / 2;
+        group.add(winW);
+        const winS = new THREE.Mesh(winGeo, rng() < 0.55 ? litMat : darkGlassMat);
+        winS.position.set(gx + t * w * 0.62, wy, gz + d / 2 + 0.15);
+        group.add(winS);
+      }
     }
   }
+
+  // Simple street strips draped over the terrain inside the town grid:
+  // two east-west streets between building rows and one north-south
+  // street running south toward the airport side.
+  const streetMat = new THREE.MeshLambertMaterial({
+    color: 0x45484e, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+  });
+  const addStreet = (points) => {
+    for (let p = 0; p < points.length - 1; p++) {
+      const ax = points[p][0], az = points[p][1];
+      const bx = points[p + 1][0], bz = points[p + 1][1];
+      const legLen = Math.hypot(bx - ax, bz - az);
+      const steps = Math.max(1, Math.round(legLen / 30));
+      for (let s = 0; s < steps; s++) {
+        const t0 = s / steps, t1 = (s + 1) / steps;
+        const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0;
+        const x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+        const h0 = heightAt(x0, z0), h1 = heightAt(x1, z1);
+        const segLen = Math.hypot(x1 - x0, z1 - z0) + 1.5;
+        const geo = new THREE.PlaneGeometry(7, segLen);
+        geo.rotateX(-Math.PI / 2);
+        const seg = new THREE.Mesh(geo, streetMat);
+        seg.position.set(mx, (h0 + h1) / 2 + 0.25, mz);
+        const yaw = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 1, 0), Math.atan2(x1 - x0, z1 - z0));
+        const pitch = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(1, 0, 0), -Math.atan2(h1 - h0, segLen));
+        seg.quaternion.copy(yaw).multiply(pitch);
+        group.add(seg);
+      }
+    }
+  };
+  addStreet([[140, -102], [320, -102], [500, -102]]);
+  addStreet([[140, 14], [320, 14], [500, 14]]);
+  addStreet([[306, -170], [306, 20], [306, 215]]);
   return group;
 }
 
@@ -416,19 +547,45 @@ function buildTrees() {
   const trunkGeo = new THREE.CylinderGeometry(1.1, 1.5, 7, 6);
   const coneGeo = new THREE.ConeGeometry(6.5, 17, 8);          // pine
   const roundGeo = new THREE.SphereGeometry(6.8, 8, 6);        // round canopy
+  const broadGeo = new THREE.SphereGeometry(6.8, 8, 6);        // broadleaf canopy
+  broadGeo.scale(1.3, 0.75, 1.3);
+  // Palm trunk: cylinder bent so the lean grows with height.
+  const palmTrunkGeo = new THREE.CylinderGeometry(0.9, 1.4, 11, 6);
+  {
+    const p = palmTrunkGeo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const t = (p.getY(i) + 5.5) / 11;
+      p.setX(i, p.getX(i) + t * t * 2.2);
+    }
+    palmTrunkGeo.computeVertexNormals();
+  }
+  const palmCrownGeo = new THREE.ConeGeometry(5.2, 2.4, 8);    // flattened palm crown
   const trunkMat = new THREE.MeshLambertMaterial({ color: 0x7a5230 });
   const pineMat = new THREE.MeshLambertMaterial({ color: 0x2f7d3a });
   const roundMat = new THREE.MeshLambertMaterial({ color: 0x4a9e46 });
+  const broadMat = new THREE.MeshLambertMaterial({ color: 0x357a33 });
+  const palmMat = new THREE.MeshLambertMaterial({ color: 0x3f9e4d });
   const COUNT = 1000;
+  const PALM_COUNT = 120;
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, COUNT);
   const pines = new THREE.InstancedMesh(coneGeo, pineMat, COUNT);
   const rounds = new THREE.InstancedMesh(roundGeo, roundMat, COUNT);
+  const broads = new THREE.InstancedMesh(broadGeo, broadMat, COUNT);
+  const palmTrunks = new THREE.InstancedMesh(palmTrunkGeo, trunkMat, PALM_COUNT);
+  const palmCrowns = new THREE.InstancedMesh(palmCrownGeo, palmMat, PALM_COUNT);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
   const v = new THREE.Vector3();
   const sc = new THREE.Vector3();
-  let placed = 0, pineCount = 0, roundCount = 0;
+  const col = new THREE.Color();
+  // Per-instance brightness jitter so canopies are not identical clones.
+  const jitter = (mesh, idx) => {
+    const b = 0.85 + rng() * 0.25;
+    col.setRGB(b, b * (0.95 + rng() * 0.1), b * (0.9 + rng() * 0.1));
+    mesh.setColorAt(idx, col);
+  };
+  let placed = 0, pineCount = 0, roundCount = 0, broadCount = 0;
   let guard = 0;
   while (placed < COUNT && guard < COUNT * 40) {
     guard++;
@@ -453,28 +610,135 @@ function buildTrees() {
     }
     if (onRunway) continue;
     const s = 0.7 + rng() * 1.0;
-    e.set(0, rng() * Math.PI * 2, 0);
+    const yaw = rng() * Math.PI * 2;
+    e.set(0, yaw, 0);
     q.setFromEuler(e);
-    v.set(x, h + 3.2 * s, z); sc.set(s, s, s);
-    m.compose(v, q, sc);
-    trunks.setMatrixAt(placed, m);
-    if (rng() < 0.6) {
+    const pick = rng();
+    if (pick < 0.45) {
+      v.set(x, h + 3.2 * s, z); sc.set(s, s, s);
+      m.compose(v, q, sc);
+      trunks.setMatrixAt(placed, m);
       v.set(x, h + 15 * s, z);
       m.compose(v, q, sc);
-      pines.setMatrixAt(pineCount++, m);
-    } else {
+      pines.setMatrixAt(pineCount, m);
+      jitter(pines, pineCount);
+      pineCount++;
+    } else if (pick < 0.75) {
+      v.set(x, h + 3.2 * s, z); sc.set(s, s, s);
+      m.compose(v, q, sc);
+      trunks.setMatrixAt(placed, m);
       v.set(x, h + 11 * s, z); sc.set(s, s * 0.82, s);
       m.compose(v, q, sc);
-      rounds.setMatrixAt(roundCount++, m);
+      rounds.setMatrixAt(roundCount, m);
+      jitter(rounds, roundCount);
+      roundCount++;
+    } else {
+      // Broadleaf: taller trunk, wide flattened deep-green canopy.
+      v.set(x, h + 3.2 * s * 1.5, z); sc.set(s, s * 1.5, s);
+      m.compose(v, q, sc);
+      trunks.setMatrixAt(placed, m);
+      v.set(x, h + 15 * s, z); sc.set(s, s, s);
+      m.compose(v, q, sc);
+      broads.setMatrixAt(broadCount, m);
+      jitter(broads, broadCount);
+      broadCount++;
     }
     placed++;
   }
   trunks.count = placed;
   pines.count = pineCount;
   rounds.count = roundCount;
+  broads.count = broadCount;
+
+  // Palms: beach fringe only, low ground just above the waterline.
+  let palmsPlaced = 0;
+  let palmGuard = 0;
+  while (palmsPlaced < PALM_COUNT && palmGuard < PALM_COUNT * 80) {
+    palmGuard++;
+    const isl = ISLANDS[Math.floor(rng() * ISLANDS.length)];
+    const ang = rng() * Math.PI * 2;
+    const rad = Math.sqrt(rng()) * isl.r * 0.98;
+    const x = isl.x + Math.cos(ang) * rad;
+    const z = isl.z + Math.sin(ang) * rad;
+    const h = heightAt(x, z);
+    if (h < 1.2 || h > 5.5) continue;
+    const slopeEst = Math.max(
+      Math.abs(heightAt(x + 7, z) - h), Math.abs(heightAt(x - 7, z) - h),
+      Math.abs(heightAt(x, z + 7) - h), Math.abs(heightAt(x, z - 7) - h));
+    if (slopeEst > 3.5) continue;
+    let onRunway = false;
+    for (const rw of RUNWAYS) {
+      const { lx, lz } = runwayLocal(x, z, rw);
+      if (Math.abs(lx) < rw.width && Math.abs(lz) < rw.length / 2 + 40) onRunway = true;
+    }
+    if (onRunway) continue;
+    const s = 0.8 + rng() * 0.5;
+    const yaw = rng() * Math.PI * 2;
+    e.set(0, yaw, 0);
+    q.setFromEuler(e);
+    v.set(x, h + 5.2 * s, z); sc.set(s, s, s);
+    m.compose(v, q, sc);
+    palmTrunks.setMatrixAt(palmsPlaced, m);
+    // Crown follows the baked-in lean (2.2 units at the top, rotated by yaw).
+    v.set(x + Math.cos(yaw) * 2.2 * s, h + 10.6 * s, z - Math.sin(yaw) * 2.2 * s);
+    sc.set(s, s * 0.8, s);
+    m.compose(v, q, sc);
+    palmCrowns.setMatrixAt(palmsPlaced, m);
+    jitter(palmCrowns, palmsPlaced);
+    palmsPlaced++;
+  }
+  palmTrunks.count = palmsPlaced;
+  palmCrowns.count = palmsPlaced;
+
+  for (const mesh of [pines, rounds, broads, palmCrowns]) {
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
   const group = new THREE.Group();
-  group.add(trunks, pines, rounds);
+  group.add(trunks, pines, rounds, broads, palmTrunks, palmCrowns);
   return group;
+}
+
+// Scattered boulders on land and a few at the shoreline, sunk partway
+// into the ground. Same runway/town exclusion style as the trees.
+function buildRocks() {
+  const rng = mulberry32(worldSeed * 409 + 29);
+  const geo = new THREE.DodecahedronGeometry(1.7, 0);
+  const mat = new THREE.MeshLambertMaterial({ color: 0x8d8d8d });
+  const COUNT = 250;
+  const rocks = new THREE.InstancedMesh(geo, mat, COUNT);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  const v = new THREE.Vector3();
+  const sc = new THREE.Vector3();
+  let placed = 0;
+  let guard = 0;
+  while (placed < COUNT && guard < COUNT * 60) {
+    guard++;
+    const isl = ISLANDS[Math.floor(rng() * ISLANDS.length)];
+    const ang = rng() * Math.PI * 2;
+    const rad = Math.sqrt(rng()) * isl.r * 0.98;
+    const x = isl.x + Math.cos(ang) * rad;
+    const z = isl.z + Math.sin(ang) * rad;
+    const h = heightAt(x, z);
+    // Mostly on land, a few right at the shoreline.
+    if (h < -0.5 || h > 65) continue;
+    if (h < 0.5 && rng() < 0.7) continue;
+    if (insideRunway(x, z, 6)) continue;
+    if (insideTownOrAirport(x, z)) continue;
+    const sx = 0.6 + rng() * 1.6;
+    const sy = 0.6 + rng() * 1.6;
+    const sz = 0.6 + rng() * 1.6;
+    e.set(rng() * Math.PI, rng() * Math.PI * 2, rng() * Math.PI);
+    q.setFromEuler(e);
+    v.set(x, h + 1.7 * sy * 0.55, z);
+    sc.set(sx, sy, sz);
+    m.compose(v, q, sc);
+    rocks.setMatrixAt(placed, m);
+    placed++;
+  }
+  rocks.count = placed;
+  return rocks;
 }
 
 // Low squashed-sphere bushes scattered on gentle low slopes, in varied
