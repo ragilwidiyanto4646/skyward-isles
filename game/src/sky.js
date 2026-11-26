@@ -58,27 +58,88 @@ function makeGlowTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+// Procedural cloud puff: several overlapping soft radial gradients on a
+// canvas give an irregular, feathery alpha edge instead of a hard blob.
+function makePuffTexture(seed) {
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = S; c.height = S;
+  const ctx = c.getContext("2d");
+  let s = seed * 2654435761 >>> 0;
+  const rand = () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  // Soft base wash so the puff has a body, not just bumps.
+  let g = ctx.createRadialGradient(S / 2, S / 2, 10, S / 2, S / 2, S * 0.48);
+  g.addColorStop(0, "rgba(255,255,255,0.45)");
+  g.addColorStop(0.6, "rgba(255,255,255,0.22)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  // Overlapping lobes at varied offsets/radii for an irregular silhouette.
+  for (let i = 0; i < 16; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = rand() * S * 0.26;
+    const lx = S / 2 + Math.cos(ang) * dist;
+    const ly = S / 2 + Math.sin(ang) * dist * 0.72;
+    const lr = S * (0.13 + rand() * 0.17);
+    const a = 0.16 + rand() * 0.3;
+    g = ctx.createRadialGradient(lx, ly, 2, lx, ly, lr);
+    g.addColorStop(0, "rgba(255,255,255," + a.toFixed(3) + ")");
+    g.addColorStop(0.55, "rgba(255,255,255," + (a * 0.55).toFixed(3) + ")");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function createClouds() {
   const group = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x8a8a8a, transparent: true, opacity: 0.95 });
-  const warmMat = new THREE.MeshLambertMaterial({ color: 0xffe2c0, emissive: 0x9a7a55, transparent: true, opacity: 0.95 });
+  const puffTex = [makePuffTexture(11), makePuffTexture(47), makePuffTexture(83)];
+  // Main cloud deck (same spots as before) plus a higher, fainter layer so
+  // the sky reads as layered fields of puffs rather than isolated blobs.
   const spots = [
     [-900, 420, -600], [700, 480, -1200], [1500, 400, 300], [-1600, 520, 800],
     [300, 560, 1600], [-500, 460, 1400], [1900, 540, -900], [-2100, 440, -1400],
     [100, 500, -2000], [1200, 620, 1400]
   ];
-  for (const [cx, cy, cz] of spots) {
+  const highSpots = [
+    [-1300, 760, -300], [900, 820, -1600], [200, 780, 900],
+    [-700, 860, 1900], [1700, 720, 1100], [-1900, 800, -1100]
+  ];
+  const buildCloud = (cx, cy, cz, spread, baseScale, baseOpacity) => {
     const cloud = new THREE.Group();
-    const puffs = 5 + Math.floor(Math.random() * 4);
+    const puffs = 10 + Math.floor(Math.random() * 6);
     for (let i = 0; i < puffs; i++) {
-      const r = 45 + Math.random() * 55;
-      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), Math.random() > 0.4 ? mat : warmMat);
-      m.position.set((Math.random() - 0.5) * 220, (Math.random() - 0.5) * 36, (Math.random() - 0.5) * 120);
-      m.scale.y = 0.55;
-      cloud.add(m);
+      const ox = (Math.random() - 0.5) * spread;
+      const oy = (Math.random() - 0.5) * spread * 0.16;
+      const oz = (Math.random() - 0.5) * spread * 0.45;
+      // Tops brighter, bottoms warmer/dimmer; sun sits toward -x/-z, so
+      // puffs on that side pick up a warm sunset tint.
+      const sunSide = ox < 0 || oz < 0;
+      const tint = oy > 6 ? 0xffffff : (sunSide ? 0xffd9b0 : 0xf3e4d4);
+      const mat = new THREE.SpriteMaterial({
+        map: puffTex[Math.floor(Math.random() * puffTex.length)],
+        color: tint,
+        transparent: true,
+        opacity: baseOpacity * (0.55 + Math.random() * 0.45),
+        depthWrite: false,
+        rotation: Math.random() * Math.PI * 2
+      });
+      const sprite = new THREE.Sprite(mat);
+      const sc = baseScale * (0.55 + Math.random() * 0.9);
+      sprite.scale.set(sc, sc * 0.52, 1);
+      sprite.position.set(ox, oy, oz);
+      cloud.add(sprite);
     }
     cloud.position.set(cx, cy, cz);
     group.add(cloud);
-  }
+  };
+  for (const [cx, cy, cz] of spots) buildCloud(cx, cy, cz, 340, 230, 0.9);
+  for (const [cx, cy, cz] of highSpots) buildCloud(cx, cy, cz, 460, 260, 0.45);
   return group;
 }
