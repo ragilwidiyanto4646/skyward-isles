@@ -12,6 +12,10 @@ import * as THREE from "three";
 
 export function createCockpit3d() {
   const group = new THREE.Group();
+  // Framing offset: the whole tub sits a little farther from the pilot's
+  // eyes and a touch lower, so the windshield view dominates the top of
+  // the frame and the structure frames it instead of filling it.
+  group.position.set(0, -0.07, -0.3);
 
   // ---- Materials -----------------------------------------------------------
   const panelMat = new THREE.MeshLambertMaterial({ color: 0x39424f });
@@ -23,6 +27,13 @@ export function createCockpit3d() {
   const yokeMat = new THREE.MeshLambertMaterial({ color: 0x1d232d });
   // Dark carpet for the cockpit floor (tub enclosure, see below).
   const carpetMat = new THREE.MeshLambertMaterial({ color: 0x1c232e });
+  // Self-lit frame materials in the panel-face color family. Window
+  // pillars, rails and the tapered side walls use these so the structure
+  // around the glass never renders as near-black slabs, whatever the
+  // cockpit light happens to be doing.
+  const frameMat = new THREE.MeshBasicMaterial({ color: 0x4a5a70, toneMapped: false });
+  const frameDarkMat = new THREE.MeshBasicMaterial({ color: 0x3d4b60, toneMapped: false });
+  const wallBodyMat = new THREE.MeshBasicMaterial({ color: 0x39465c, toneMapped: false });
 
   // ---- Small helpers -------------------------------------------------------
   function box(w, h, d, mat, x, y, z) {
@@ -168,6 +179,106 @@ export function createCockpit3d() {
     c.font = "bold " + px + "px sans-serif";
     c.textAlign = align || "center";
     c.fillText(text, X(x), Y(y));
+  }
+
+  // ---- Side-wall inner face ------------------------------------------------
+  // A self-lit printed face for the inside of each lower side wall, in the
+  // same blue-gray family as the panel faces: gradient base, speckle, two
+  // seams, corner screws, an armrest band along the top and a chart pocket
+  // outline. The plane is turned to face the pilot (inward on each side).
+  function makeSideWallFace(side) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 280;
+    const c = canvas.getContext("2d");
+    const grad = c.createLinearGradient(0, 0, 0, 280);
+    grad.addColorStop(0, "#4a5a70");
+    grad.addColorStop(0.55, "#3d4b60");
+    grad.addColorStop(1, "#334158");
+    c.fillStyle = grad;
+    c.fillRect(0, 0, 640, 280);
+    c.fillStyle = "rgba(255,255,255,0.05)";
+    for (let i = 0; i < 700; i++) {
+      c.fillRect(Math.random() * 640, Math.random() * 280, 1.4, 1.4);
+    }
+    c.fillStyle = "rgba(0,0,0,0.08)";
+    for (let i = 0; i < 500; i++) {
+      c.fillRect(Math.random() * 640, Math.random() * 280, 1.4, 1.4);
+    }
+    // Armrest band along the top edge.
+    c.fillStyle = "#5a6c85";
+    c.fillRect(0, 0, 640, 34);
+    c.fillStyle = "rgba(10,14,20,0.55)";
+    c.fillRect(0, 34, 640, 3);
+    // Horizontal seams.
+    c.strokeStyle = "rgba(10,14,20,0.5)";
+    c.lineWidth = 2;
+    for (const sy of [120, 232]) {
+      c.beginPath();
+      c.moveTo(8, sy);
+      c.lineTo(632, sy);
+      c.stroke();
+    }
+    // Chart pocket: recessed rectangle with a stitched border.
+    c.fillStyle = "rgba(16,22,32,0.45)";
+    c.fillRect(190, 132, 260, 88);
+    c.strokeStyle = "#8fa3ba";
+    c.lineWidth = 2;
+    c.setLineDash([7, 5]);
+    c.strokeRect(190, 132, 260, 88);
+    c.setLineDash([]);
+    c.fillStyle = "#cfe3f7";
+    c.font = "bold 15px sans-serif";
+    c.textAlign = "center";
+    c.fillText("CHARTS", 320, 152);
+    // Small placards at each end of the wall.
+    c.font = "bold 13px sans-serif";
+    c.fillText("ARMREST", 88, 66);
+    c.fillText("MAP LIGHT", 552, 66);
+    // Corner screws.
+    for (const [sx, sy] of [[18, 52], [622, 52], [18, 262], [622, 262], [320, 262]]) {
+      c.fillStyle = "#8fa3ba";
+      c.beginPath();
+      c.arc(sx, sy, 6, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "#202833";
+      c.lineWidth = 1.6;
+      c.beginPath();
+      c.moveTo(sx - 4, sy);
+      c.lineTo(sx + 4, sy);
+      c.stroke();
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.38, 0.6),
+      new THREE.MeshBasicMaterial({ map: texture, toneMapped: false })
+    );
+    // Face inward: left wall's face looks toward +X, right wall's toward -X.
+    mesh.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    mesh.position.set(side * 1.545, -0.9, -1.3);
+    return mesh;
+  }
+
+  // Tapered lower side wall: an extruded profile whose top edge slopes
+  // down toward the nose (taller at the back, lower at the front), so the
+  // wall reads as shaped cockpit structure rather than a flat slab. The
+  // profile is drawn in (length, height) space, extruded 7cm thick, then
+  // turned so its length runs fore/aft and its thickness across the cabin.
+  function makeLowerSideWall(side) {
+    const profile = new THREE.Shape();
+    profile.moveTo(0, 0);
+    profile.lineTo(1.5, 0);
+    profile.lineTo(1.5, 0.78);
+    profile.lineTo(0, 0.95);
+    profile.lineTo(0, 0);
+    const geo = new THREE.ExtrudeGeometry(profile, { depth: 0.07, bevelEnabled: false });
+    const mesh = new THREE.Mesh(geo, wallBodyMat);
+    mesh.rotation.y = Math.PI / 2;
+    // After the turn: profile length points forward (-Z) from z = -0.55,
+    // thickness spans x 1.55..1.62 (mirrored on the left), base on the floor.
+    mesh.position.set(side < 0 ? -1.62 : 1.55, -1.33, -0.55);
+    return mesh;
   }
 
   // One printed toggle switch: mounting plate + filled lever with a knob,
@@ -336,10 +447,10 @@ export function createCockpit3d() {
   // ---- Windshield frame: pillars + header bar ------------------------------
   // Two tapered outer posts angling up and outward from the panel corners,
   // plus a slim center post, giving the two-pane windshield look.
-  group.add(postBetween(-1.3, -0.05, -1.66, -1.66, 1.18, -1.98, 0.09, 0.05, trimMat));
-  group.add(postBetween(1.3, -0.05, -1.66, 1.66, 1.18, -1.98, 0.09, 0.05, trimMat));
-  group.add(postBetween(0, -0.03, -1.72, 0, 1.12, -1.92, 0.04, 0.028, trimMat));
-  const header = box(3.45, 0.13, 0.12, trimMat, 0, 1.16, -1.97);
+  group.add(postBetween(-1.3, -0.05, -1.66, -1.66, 1.18, -1.98, 0.08, 0.045, frameMat));
+  group.add(postBetween(1.3, -0.05, -1.66, 1.66, 1.18, -1.98, 0.08, 0.045, frameMat));
+  group.add(postBetween(0, -0.03, -1.72, 0, 1.12, -1.92, 0.035, 0.025, frameMat));
+  const header = box(3.45, 0.12, 0.12, frameMat, 0, 1.16, -1.97);
   header.rotation.x = -0.18;
   group.add(header);
   // Grab handles on the outer pillars.
@@ -355,10 +466,14 @@ export function createCockpit3d() {
   // Switches are drawn once onto a canvas texture (static) and a few tiny
   // 3D toggles protrude for depth.
   const overhead = new THREE.Group();
-  overhead.position.set(0, 0.74, -1.32);
-  overhead.rotation.x = 0.85;
+  // Raised, pushed forward and scaled down a touch so it reads as a slim
+  // strip along the very top edge of the frame instead of a slab hanging
+  // over the windshield (and clear of the HUD compass strip).
+  overhead.position.set(0, 1.04, -1.6);
+  overhead.rotation.x = 0.9;
+  overhead.scale.setScalar(0.88);
   group.add(overhead);
-  overhead.add(box(1.5, 0.56, 0.07, panelMat, 0, 0, -0.035));
+  overhead.add(box(1.5, 0.56, 0.07, frameDarkMat, 0, 0, -0.035));
 
   const ohCanvas = document.createElement("canvas");
   ohCanvas.width = 512;
@@ -488,18 +603,20 @@ export function createCockpit3d() {
   }
 
   // Overhead cheeks: angled filler panels bridging the overhead panel ends
-  // (x = ±0.75) out toward the windshield pillars, so no sky shows under
-  // the overhead edges. Yawed like the panel side sections (outer edge
-  // swept back) and pitched partway toward the overhead panel's tilt.
+  // (x = ±0.68 after its 0.9 scale) out toward the windshield pillars, so
+  // no sky shows under the overhead edges. They sit higher and farther
+  // forward with the raised overhead, in the same self-lit frame material.
   for (const side of [-1, 1]) {
-    const cheek = box(0.75, 0.55, 0.06, panelMat, side * 1.08, 0.92, -1.62);
+    const cheek = box(0.6, 0.36, 0.06, frameDarkMat, side * 1.0, 1.12, -1.78);
     cheek.rotation.order = "YXZ";
-    cheek.rotation.y = side * 0.55;
-    cheek.rotation.x = 0.5;
+    cheek.rotation.y = side * 0.5;
+    cheek.rotation.x = 0.55;
     group.add(cheek);
   }
   // Ceiling: closes the top of the tub above the overhead panel and header.
-  group.add(box(3.4, 0.06, 1.5, trimMat, 0, 1.3, -1.25));
+  // Kept high and short so its underside stays a slim strip at the top
+  // edge instead of flat slabs filling the top corners.
+  group.add(box(3.4, 0.06, 1.3, frameDarkMat, 0, 1.38, -1.2));
 
   // ---- Center pedestal ---------------------------------------------------------
   // Fills the void below the panel: a radio stack printed on a static
@@ -642,7 +759,7 @@ export function createCockpit3d() {
   // Column rising from below the panel + a wheel that rolls with bank and
   // shifts fore/aft with pitch (mirrors the old 2D yoke behavior).
   const yoke = new THREE.Group();
-  const YOKE_BASE = new THREE.Vector3(0, -0.6, -1.08);
+  const YOKE_BASE = new THREE.Vector3(0, -0.66, -1.08);
   yoke.position.copy(YOKE_BASE);
   group.add(yoke);
 
@@ -651,16 +768,27 @@ export function createCockpit3d() {
   column.rotation.x = 1.15;
   yoke.add(column);
 
+  // Ram's-horn yoke: a center hub with two bent arms, each ending in an
+  // angled grip the pilot's hands wrap around. Overall grip span is about
+  // 0.26 — an aircraft yoke, not a car steering wheel. The `wheel` group
+  // keeps its old contract: update() rolls it on Z with bank.
   const wheel = new THREE.Group();
   wheel.rotation.x = -0.35;
   yoke.add(wheel);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.028, 8, 24), yokeMat);
-  wheel.add(rim);
-  const spokeH = box(0.32, 0.035, 0.03, yokeMat, 0, 0, 0);
-  wheel.add(spokeH);
-  const spokeV = box(0.035, 0.3, 0.03, yokeMat, 0, 0, 0);
-  wheel.add(spokeV);
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 12), metalMat);
+  for (const side of [-1, 1]) {
+    // Arm out from the hub, dropping slightly, then the grip rising up.
+    wheel.add(postBetween(0, 0, 0, side * 0.07, -0.018, 0, 0.02, 0.018, yokeMat));
+    wheel.add(postBetween(side * 0.07, -0.018, 0, side * 0.115, 0.045, 0, 0.019, 0.017, yokeMat));
+    // Rounded cap on top of each grip.
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), yokeMat);
+    cap.position.set(side * 0.115, 0.045, 0);
+    wheel.add(cap);
+    // Small joint sphere where arm meets grip, so the bend reads smooth.
+    const joint = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), yokeMat);
+    joint.position.set(side * 0.07, -0.018, 0);
+    wheel.add(joint);
+  }
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.05, 12), metalMat);
   hub.rotation.x = Math.PI / 2;
   wheel.add(hub);
   const hubDot = new THREE.Mesh(
@@ -753,23 +881,43 @@ export function createCockpit3d() {
     group.add(pedal);
     group.add(postBetween(side * 0.2, -1.27, -1.6, side * 0.2, -1.02, -1.42, 0.025, 0.025, metalMat));
   }
-  // Side walls: vertical panels outboard of the consoles, from the floor up
-  // past the panel's mid-height, closing the view through the sides.
+  // Side structure: a tapered lower wall with a framed side WINDOW above
+  // it, instead of the old flat slabs. The window is bounded by the
+  // windshield pillar in front, a tapered rear pillar, the wall's sloped
+  // sill below and a top rail under the ceiling — sky and terrain show
+  // through the glass area, but every edge is finished structure.
   for (const side of [-1, 1]) {
-    group.add(box(0.08, 1.55, 1.7, panelSideMat, side * 1.64, -0.58, -1.32));
+    // Tapered lower wall + its self-lit printed inner face.
+    group.add(makeLowerSideWall(side));
+    group.add(makeSideWallFace(side));
+    // Sill cap following the wall's sloped top edge (front end lower).
+    const sill = box(0.1, 0.055, 1.52, frameMat, side * 1.585, -0.465, -1.3);
+    sill.rotation.x = -0.113;
+    group.add(sill);
+    // Front post: joins the wall's front top corner up to the base of the
+    // windshield pillar, closing the front corner of the side window.
+    group.add(postBetween(
+      side * 1.56, -0.55, -1.95,
+      side * 1.48, 0.08, -1.76,
+      0.075, 0.055, frameMat
+    ));
+    // Rear pillar: tapered post at the back of the side window.
+    group.add(postBetween(
+      side * 1.58, -0.4, -0.62,
+      side * 1.62, 1.02, -0.66,
+      0.075, 0.052, frameMat
+    ));
+    // Top rail: fills from the window's top edge up to the ceiling and
+    // runs forward into the header bar, closing the top corners.
+    group.add(box(0.09, 0.38, 1.55, frameMat, side * 1.6, 1.17, -1.32));
     // Drop panel under each side console, console underside to floor.
     group.add(box(0.4, 0.72, 0.72, panelSideMat, side * 0.82, -1.04, -1.18));
-    // Upper side filler: continues the side wall from its top edge up to
-    // the ceiling, closing the sky gap outboard of the windshield pillars
-    // (verified by capture — the wall alone left the top corners open).
-    // Offset 5mm outboard so its inner face is not coplanar with the wall's.
-    group.add(box(0.08, 1.2, 1.7, panelSideMat, side * 1.645, 0.74, -1.32));
   }
 
   // ---- Cockpit light -----------------------------------------------------------
   // Soft warm light so the panel reads at every heading. Short range keeps
   // it from lighting up the world outside.
-  const cockpitLight = new THREE.PointLight(0xffe8c8, 5.5, 7, 1.2);
+  const cockpitLight = new THREE.PointLight(0xffe8c8, 6.5, 7, 1.2);
   cockpitLight.position.set(0, 0.3, -0.7);
   group.add(cockpitLight);
 

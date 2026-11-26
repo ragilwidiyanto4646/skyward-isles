@@ -50,6 +50,14 @@ export function createCameras() {
     getFreeOrbit() { return { az: freeAz, pol: freePol, dist: freeDist }; },
 
     update(camera, flight, planeMesh, dt, snap = false, input = null) {
+      // Cockpit mode gets a wider field of view so the windshield view
+      // opens up; chase and free keep the standard 62 degrees. Applied
+      // here, per frame, so the widening can never leak into other modes.
+      const targetFov = mode === "cockpit" ? 68 : 62;
+      if (camera.fov !== targetFov) {
+        camera.fov = targetFov;
+        camera.updateProjectionMatrix();
+      }
       if (mode === "cockpit") {
         // Sit just behind the canopy, looking along the nose.
         offset.set(0, 1.7, 0.6).applyQuaternion(planeMesh.quaternion);
