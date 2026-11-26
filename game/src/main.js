@@ -8,7 +8,7 @@ import { createCameras } from "./camera.js";
 import { createCockpit3d } from "./cockpit3d.js";
 import { createHud } from "./hud.js";
 import { createInput } from "./input.js";
-import { createMission, buildMissionObjects, updateMission, RING_COURSE } from "./missions.js";
+import { createMission, buildMissionObjects, updateMission, RING_COURSE, initMissionAudio } from "./missions.js";
 
 const params = new URLSearchParams(location.search);
 const seed = parseInt(params.get("seed") || "1", 10) || 1;
@@ -45,6 +45,7 @@ const input = createInput();
 window.__plane = plane;
 window.__flight = flight;
 window.__cameras = cameras;
+window.__getMission = () => mission; // live mission state for play-tests
 
 // Real 3D cockpit, attached to the camera so it renders in cockpit view.
 // The old 2D cockpitFrame canvas stays hidden; the DOM HUD is unchanged.
@@ -95,6 +96,7 @@ function hideScreens() {
 
 function startMission(kind) {
   ensureAudio();
+  initMissionAudio(); // ring-pass chime / miss blip (Phase 4), gesture-safe
   mission = createMission(kind);
   buildMissionObjects(scene, mission);
   resetFlight(flight, 0);
