@@ -8,6 +8,7 @@
 //            so the plane can be admired hands-free. The orbit distance is
 //            clamped so the camera never clips into the mesh.
 import * as THREE from "three";
+import { heightAt } from "./terrain.js";
 
 const FREE_MIN_DIST = 14;   // outside the wingtips (half-span 7.75) + margin
 const FREE_MAX_DIST = 60;
@@ -102,11 +103,13 @@ export function createCameras() {
         ).multiplyScalar(freeDist).applyQuaternion(quat);
         desired.copy(planeMesh.position).add(offset);
         // Never sink the camera under terrain or water.
-        desired.y = Math.max(desired.y, 4);
+        desired.y = Math.max(desired.y, heightAt(desired.x, desired.z) + 1.2, 4);
         // Snap on the first free frame after another mode so the view
         // doesn't swing across the world; lerp afterwards for smoothness.
+        // Exponential form keeps the follow time constant the same at any
+        // frame rate (a plain dt*k factor drifts with fps and can overshoot).
         if (snap || prevMode !== "free") chasePos.copy(desired);
-        else chasePos.lerp(desired, Math.min(1, dt * 3.2));
+        else chasePos.lerp(desired, 1 - Math.exp(-dt * 3.2));
         camera.position.copy(chasePos);
         lookAt.copy(planeMesh.position);
         lookAt.y += 1.2;
@@ -121,9 +124,9 @@ export function createCameras() {
       offset.set(0, 6.5, 26).applyQuaternion(quat);
       desired.copy(planeMesh.position).add(offset);
       // Never sink the camera under terrain or water.
-      desired.y = Math.max(desired.y, 4);
+      desired.y = Math.max(desired.y, heightAt(desired.x, desired.z) + 1.2, 4);
       if (snap) chasePos.copy(desired);
-      else chasePos.lerp(desired, Math.min(1, dt * 3.2));
+      else chasePos.lerp(desired, 1 - Math.exp(-dt * 3.2));
       camera.position.copy(chasePos);
       lookAt.copy(planeMesh.position);
       lookAt.y += 2.2;

@@ -15,6 +15,11 @@ export function createFlightState() {
     heading: 0,        // radians, 0 = north (-Z)
     pitch: 0,
     roll: 0,
+    // Smoothed attitude rates (rad/s). Input sets a target rate and these
+    // ease toward it, so the nose/wing roll in with a touch of inertia
+    // instead of snapping to full rate on the first frame of input.
+    pitchRateSm: 0,
+    rollRateSm: 0,
     speed: 0,          // units/sec
     throttle: 0,       // 0..1
     onGround: true,
@@ -46,13 +51,20 @@ export function updateFlight(state, input, dt) {
   const pitchRate = 1.05 * authority;
   const rollRate = 1.9 * authority;
 
+  // Ease the actual attitude rates toward the input-driven targets
+  // (time constant ~0.08 s): full rate is still reached quickly, but the
+  // first frames of a pitch/roll input ramp in instead of snapping.
+  const rateEase = 1 - Math.exp(-dt * 12);
   if (!state.onGround || state.speed > FLIGHT.TAKEOFF_SPEED * 0.7) {
-    state.pitch += input.pitchInput * pitchRate * dt;
+    state.pitchRateSm += (input.pitchInput * pitchRate - state.pitchRateSm) * rateEase;
+    state.pitch += state.pitchRateSm * dt;
     state.pitch = THREE.MathUtils.clamp(state.pitch, -0.95, 0.95);
   } else {
     state.pitch *= Math.max(0, 1 - dt * 4);
+    state.pitchRateSm *= Math.max(0, 1 - dt * 4);
   }
-  state.roll += input.rollInput * rollRate * dt;
+  state.rollRateSm += (input.rollInput * rollRate - state.rollRateSm) * rateEase;
+  state.roll += state.rollRateSm * dt;
   // Wings drift back toward level when no roll input.
   if (Math.abs(input.rollInput) < 0.05) state.roll -= state.roll * Math.min(1, dt * 1.4);
   state.roll = THREE.MathUtils.clamp(state.roll, -1.25, 1.25);
@@ -146,6 +158,8 @@ export function resetFlight(state, runwayIndex = 0) {
   state.heading = rw.heading;
   state.pitch = 0;
   state.roll = 0;
+  state.pitchRateSm = 0;
+  state.rollRateSm = 0;
   state.speed = 0;
   state.throttle = 0;
   state.onGround = true;

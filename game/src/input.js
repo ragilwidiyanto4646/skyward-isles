@@ -64,7 +64,14 @@ export function createInput() {
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
+  let lastPollMs = 0;
   state.poll = function () {
+    // Elapsed seconds since the last poll, for frame-rate-independent
+    // mouse decay below (a fixed per-frame factor decays ~3x slower at
+    // 20 fps than at 60 fps).
+    const nowMs = performance.now();
+    const dtSec = lastPollMs ? Math.min(0.1, (nowMs - lastPollMs) / 1000) : 1 / 60;
+    lastPollMs = nowMs;
     const k = state.keys;
     state.throttleUp = k.has("w") || k.has("shift");
     state.throttleDown = k.has("s") || k.has("control");
@@ -77,8 +84,10 @@ export function createInput() {
     pitch += state.mousePitch;
     roll += state.mouseRoll;
     if (!state.dragging) {
-      state.mousePitch *= 0.9;
-      state.mouseRoll *= 0.9;
+      // Same feel as 0.9 per frame at 60 fps, but constant per second.
+      const decay = Math.pow(0.9, dtSec * 60);
+      state.mousePitch *= decay;
+      state.mouseRoll *= decay;
     }
     state.pitchInput = clamp(pitch, -1, 1);
     state.rollInput = clamp(roll, -1, 1);
