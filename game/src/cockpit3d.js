@@ -307,8 +307,8 @@ export function createCockpit3d() {
   }
 
   // ---- Screens -------------------------------------------------------------
-  const pfd = makeScreen(384, 300, 0.66, 0.515);
-  const nd = makeScreen(384, 300, 0.66, 0.515);
+  const pfd = makeScreen(384, 300, 0.69, 0.54);
+  const nd = makeScreen(384, 300, 0.69, 0.54);
   const eng = makeScreen(320, 300, 0.58, 0.545);
   const stby = makeScreen(320, 300, 0.58, 0.545);
 
@@ -340,8 +340,8 @@ export function createCockpit3d() {
   const center = makeSection(1.7, panelMat);
   center.position.set(0, PANEL_Y, PANEL_Z);
   group.add(center);
-  addScreen(center, pfd, -0.42, 0.04, 0.66, 0.515);
-  addScreen(center, nd, 0.42, 0.04, 0.66, 0.515);
+  addScreen(center, pfd, -0.42, 0.04, 0.69, 0.54);
+  addScreen(center, nd, 0.42, 0.04, 0.69, 0.54);
   addKnob(center, -0.72, -0.3, 0.022);
   addKnob(center, -0.52, -0.3, 0.022);
   addKnob(center, 0.52, -0.3, 0.022);
@@ -350,10 +350,10 @@ export function createCockpit3d() {
   // lamps, knob labels, and a toggle row along the bottom edge.
   center.add(makePanelFace(1.7, PANEL_H, 1024, 480, (c, X, Y, S) => {
     panelText(c, X, Y, "SKYWARD ISLES", 0, 0.365, 13);
-    panelText(c, X, Y, "PRIMARY FLIGHT DISPLAY", -0.48, -0.278, 12);
-    panelText(c, X, Y, "NAVIGATION DISPLAY", 0.48, -0.278, 12);
+    // No placards under the displays: the on-canvas titles (PFD / ND) carry
+    // that information, and the band below the bezels belongs to the lamps.
     const lampLabels = ["LOW FUEL", "STALL", "GEAR", "OIL", "ALT"];
-    lampLabels.forEach((t, i) => panelText(c, X, Y, t, -0.32 + i * 0.16, -0.262, 10));
+    lampLabels.forEach((t, i) => panelText(c, X, Y, t, -0.32 + i * 0.16, -0.29, 10));
     panelText(c, X, Y, "BARO", -0.795, -0.315, 11);
     panelText(c, X, Y, "HDG", -0.62, -0.315, 11);
     panelText(c, X, Y, "CRS", 0.62, -0.315, 11);
@@ -374,11 +374,11 @@ export function createCockpit3d() {
   const lampMats = [];
   const lampColors = [0xff5a4e, 0xff5a4e, 0x2fbf71, 0xffb340, 0xffb340];
   for (let i = 0; i < 5; i++) {
-    const housing = box(0.13, 0.05, 0.02, bezelMat, -0.32 + i * 0.16, -0.31, 0.005);
+    const housing = box(0.13, 0.05, 0.02, bezelMat, -0.32 + i * 0.16, -0.32, 0.005);
     center.add(housing);
     const lampMat = new THREE.MeshBasicMaterial({ color: 0x232b36, toneMapped: false });
     const lamp = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.034), lampMat);
-    lamp.position.set(-0.32 + i * 0.16, -0.31, 0.016);
+    lamp.position.set(-0.32 + i * 0.16, -0.32, 0.016);
     center.add(lamp);
     lampMats.push(lampMat);
   }
@@ -401,7 +401,7 @@ export function createCockpit3d() {
   addKnob(leftHinge, -0.22, -0.3, 0.022);
   // Printed left face (coords relative to the section center at x = -0.46).
   const leftFace = makePanelFace(0.92, PANEL_H, 560, 480, (c, X, Y, S) => {
-    panelText(c, X, Y, "STANDBY INSTRUMENTS", 0, -0.278, 12);
+    panelText(c, X, Y, "STANDBY INSTRUMENTS", 0, -0.3, 12);
     panelText(c, X, Y, "DIM", -0.355, -0.315, 11);
     panelText(c, X, Y, "TEST", 0.355, -0.315, 11);
     const toggles = ["BAT", "ALT", "MAG L", "MAG R"];
@@ -431,7 +431,7 @@ export function createCockpit3d() {
   addKnob(rightHinge, 0.7, -0.3, 0.022);
   // Printed right face (coords relative to the section center at x = +0.46).
   const rightFace = makePanelFace(0.92, PANEL_H, 560, 480, (c, X, Y, S) => {
-    panelText(c, X, Y, "ENGINE", 0, -0.278, 13);
+    panelText(c, X, Y, "ENGINE", 0, -0.3, 13);
     panelText(c, X, Y, "DIM", -0.355, -0.315, 11);
     panelText(c, X, Y, "TEST", 0.355, -0.315, 11);
     const toggles = ["NAV", "BEACON", "STROBE", "LANDING"];
@@ -449,7 +449,7 @@ export function createCockpit3d() {
   // plus a slim center post, giving the two-pane windshield look.
   group.add(postBetween(-1.3, -0.05, -1.66, -1.66, 1.18, -1.98, 0.08, 0.045, frameMat));
   group.add(postBetween(1.3, -0.05, -1.66, 1.66, 1.18, -1.98, 0.08, 0.045, frameMat));
-  group.add(postBetween(0, -0.03, -1.72, 0, 1.12, -1.92, 0.035, 0.025, frameMat));
+  group.add(postBetween(0, -0.03, -1.72, 0, 1.12, -1.92, 0.027, 0.02, frameMat));
   const header = box(3.45, 0.12, 0.12, frameMat, 0, 1.16, -1.97);
   header.rotation.x = -0.18;
   group.add(header);
@@ -469,7 +469,7 @@ export function createCockpit3d() {
   // Raised, pushed forward and scaled down a touch so it reads as a slim
   // strip along the very top edge of the frame instead of a slab hanging
   // over the windshield (and clear of the HUD compass strip).
-  overhead.position.set(0, 1.04, -1.6);
+  overhead.position.set(0, 1.01, -1.6);
   overhead.rotation.x = 0.9;
   overhead.scale.setScalar(0.88);
   group.add(overhead);
@@ -480,10 +480,11 @@ export function createCockpit3d() {
   ohCanvas.height = 192;
   {
     const c = ohCanvas.getContext("2d");
-    // Lighter blue-gray base to match the panel faces.
+    // Lighter blue-gray base to match the panel faces, brightened so the
+    // overhead reads as clearly as the main panel under ACES tone mapping.
     const grad = c.createLinearGradient(0, 0, 0, 192);
-    grad.addColorStop(0, "#46536a");
-    grad.addColorStop(1, "#39465c");
+    grad.addColorStop(0, "#55677f");
+    grad.addColorStop(1, "#46536a");
     c.fillStyle = grad;
     c.fillRect(0, 0, 512, 192);
     c.fillStyle = "rgba(255,255,255,0.05)";
@@ -515,8 +516,8 @@ export function createCockpit3d() {
         c.lineTo(sx - 4, 150);
         c.stroke();
       }
-      c.fillStyle = "#7fa8cc";
-      c.font = "bold 14px sans-serif";
+      c.fillStyle = "#a8cdf0";
+      c.font = "bold 15px sans-serif";
       c.fillText(sec.name, sx + 59, 26);
       sec.switches.forEach((label, j) => {
         const i = s * 2 + j;
@@ -622,10 +623,10 @@ export function createCockpit3d() {
   // Fills the void below the panel: a radio stack printed on a static
   // canvas face (COM/NAV/XPDR with digit windows), toggle glyphs below.
   const pedestal = new THREE.Group();
-  pedestal.position.set(0, -0.95, -1.45);
+  pedestal.position.set(0, -0.88, -1.45);
   group.add(pedestal);
   // Tall pedestal body running from just below the panel down through the
-  // floor line (world y -1.57..-0.67). The z offset keeps the front face at
+  // floor line (world y -1.5..-0.6). The z offset keeps the front face at
   // local z = +0.15 so the radio face plane below stays exactly in place.
   pedestal.add(box(0.72, 0.9, 0.32, panelMat, 0, -0.17, -0.01));
 
@@ -759,7 +760,7 @@ export function createCockpit3d() {
   // Column rising from below the panel + a wheel that rolls with bank and
   // shifts fore/aft with pitch (mirrors the old 2D yoke behavior).
   const yoke = new THREE.Group();
-  const YOKE_BASE = new THREE.Vector3(0, -0.66, -1.08);
+  const YOKE_BASE = new THREE.Vector3(0, -0.6, -1.08);
   yoke.position.copy(YOKE_BASE);
   group.add(yoke);
 
@@ -770,7 +771,7 @@ export function createCockpit3d() {
 
   // Ram's-horn yoke: a center hub with two bent arms, each ending in an
   // angled grip the pilot's hands wrap around. Overall grip span is about
-  // 0.26 — an aircraft yoke, not a car steering wheel. The `wheel` group
+  // 0.28 — an aircraft yoke, not a car steering wheel. The `wheel` group
   // keeps its old contract: update() rolls it on Z with bank.
   const wheel = new THREE.Group();
   wheel.rotation.x = -0.35;
@@ -778,10 +779,10 @@ export function createCockpit3d() {
   for (const side of [-1, 1]) {
     // Arm out from the hub, dropping slightly, then the grip rising up.
     wheel.add(postBetween(0, 0, 0, side * 0.07, -0.018, 0, 0.02, 0.018, yokeMat));
-    wheel.add(postBetween(side * 0.07, -0.018, 0, side * 0.115, 0.045, 0, 0.019, 0.017, yokeMat));
+    wheel.add(postBetween(side * 0.07, -0.018, 0, side * 0.125, 0.048, 0, 0.02, 0.018, yokeMat));
     // Rounded cap on top of each grip.
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), yokeMat);
-    cap.position.set(side * 0.115, 0.045, 0);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 8), yokeMat);
+    cap.position.set(side * 0.125, 0.048, 0);
     wheel.add(cap);
     // Small joint sphere where arm meets grip, so the bend reads smooth.
     const joint = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), yokeMat);
@@ -917,7 +918,7 @@ export function createCockpit3d() {
   // ---- Cockpit light -----------------------------------------------------------
   // Soft warm light so the panel reads at every heading. Short range keeps
   // it from lighting up the world outside.
-  const cockpitLight = new THREE.PointLight(0xffe8c8, 6.5, 7, 1.2);
+  const cockpitLight = new THREE.PointLight(0xffe8c8, 7.5, 7, 1.2);
   cockpitLight.position.set(0, 0.3, -0.7);
   group.add(cockpitLight);
 
@@ -960,12 +961,12 @@ export function createCockpit3d() {
       ctx.stroke();
       if (t.text) {
         ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 12px sans-serif";
-        ctx.fillText(t.text, cx + Math.cos(a) * (r - 17), cy + Math.sin(a) * (r - 17));
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText(t.text, cx + Math.cos(a) * (r - 18), cy + Math.sin(a) * (r - 18));
       }
     }
     ctx.fillStyle = "#bfe2ff";
-    ctx.font = "bold 11px sans-serif";
+    ctx.font = "bold 13px sans-serif";
     ctx.fillText(label, cx, cy + r * 0.62);
     ctx.textBaseline = "alphabetic";
   }
@@ -985,7 +986,7 @@ export function createCockpit3d() {
 
   function screenTitle(ctx, w, text) {
     ctx.fillStyle = "#9fc4e8";
-    ctx.font = "bold 16px sans-serif";
+    ctx.font = "bold 17px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(text, w / 2, 22);
   }
@@ -1014,7 +1015,7 @@ export function createCockpit3d() {
     ctx.fillStyle = "#8a5a33"; ctx.fillRect(-ballW, 0, ballW * 2, ballH);
     ctx.fillStyle = "#ffffff"; ctx.fillRect(-ballW, -1.5, ballW * 2, 3);
     ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
+    ctx.font = "bold 13px sans-serif"; ctx.textAlign = "center";
     for (const deg of [-20, -10, 10, 20]) {
       const off = -deg * 3.4;
       const len = Math.abs(deg) === 10 ? 58 : 40;
@@ -1038,7 +1039,7 @@ export function createCockpit3d() {
     ctx.fillStyle = "rgba(8,12,20,0.9)";
     ctx.fillRect(4, ballY, tapeW, ballH);
     const pxPerKt = ballH / 90;
-    ctx.fillStyle = "#ffffff"; ctx.font = "bold 14px sans-serif"; ctx.textAlign = "left";
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "left";
     ctx.strokeStyle = "#9fd8ff"; ctx.lineWidth = 2;
     const ktStart = Math.floor((knots - 50) / 10) * 10;
     for (let kt = ktStart; kt <= knots + 50; kt += 10) {
@@ -1052,8 +1053,8 @@ export function createCockpit3d() {
     ctx.fillRect(6, bcy - 14, tapeW - 4, 28);
     ctx.strokeStyle = "#57e6a9"; ctx.lineWidth = 2.5;
     ctx.strokeRect(6, bcy - 14, tapeW - 4, 28);
-    ctx.fillStyle = "#57e6a9"; ctx.font = "bold 19px monospace"; ctx.textAlign = "center";
-    ctx.fillText(String(Math.round(knots)), 4 + tapeW / 2, bcy + 7);
+    ctx.fillStyle = "#57e6a9"; ctx.font = "bold 22px monospace"; ctx.textAlign = "center";
+    ctx.fillText(String(Math.round(knots)), 4 + tapeW / 2, bcy + 8);
 
     // Altitude tape (right)
     const ax = W - tapeW - 4;
@@ -1062,7 +1063,7 @@ export function createCockpit3d() {
     ctx.fillStyle = "rgba(8,12,20,0.9)";
     ctx.fillRect(ax, ballY, tapeW, ballH);
     const pxPerFt = ballH / 900;
-    ctx.fillStyle = "#ffffff"; ctx.font = "bold 14px sans-serif"; ctx.textAlign = "left";
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "left";
     ctx.strokeStyle = "#9fd8ff"; ctx.lineWidth = 2;
     const ftStart = Math.floor((feet - 500) / 100) * 100;
     for (let ft = ftStart; ft <= feet + 500; ft += 100) {
@@ -1076,8 +1077,8 @@ export function createCockpit3d() {
     ctx.fillRect(ax + 2, bcy - 14, tapeW - 4, 28);
     ctx.strokeStyle = "#57e6a9"; ctx.lineWidth = 2.5;
     ctx.strokeRect(ax + 2, bcy - 14, tapeW - 4, 28);
-    ctx.fillStyle = "#57e6a9"; ctx.font = "bold 16px monospace"; ctx.textAlign = "center";
-    ctx.fillText(String(Math.round(feet)), ax + tapeW / 2, bcy + 6);
+    ctx.fillStyle = "#57e6a9"; ctx.font = "bold 19px monospace"; ctx.textAlign = "center";
+    ctx.fillText(String(Math.round(feet)), ax + tapeW / 2, bcy + 7);
 
     // Heading strip (bottom)
     const hy = H - 32;
@@ -1086,7 +1087,7 @@ export function createCockpit3d() {
     ctx.fillStyle = "rgba(8,12,20,0.92)";
     ctx.fillRect(4, hy, W - 8, 28);
     const pxPerDeg = (W - 8) / 90;
-    ctx.fillStyle = "#ffffff"; ctx.font = "bold 14px sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center";
     ctx.strokeStyle = "#9fd8ff"; ctx.lineWidth = 2;
     const hStart = Math.floor((hdgDeg - 50) / 10) * 10;
     for (let hd = hStart; hd <= hdgDeg + 50; hd += 10) {
@@ -1107,7 +1108,7 @@ export function createCockpit3d() {
     ctx.fillRect(W / 2 - 26, hy + 2, 52, 20);
     ctx.strokeStyle = "#57e6a9"; ctx.lineWidth = 2;
     ctx.strokeRect(W / 2 - 26, hy + 2, 52, 20);
-    ctx.fillStyle = "#57e6a9"; ctx.font = "bold 15px monospace"; ctx.textAlign = "center";
+    ctx.fillStyle = "#57e6a9"; ctx.font = "bold 17px monospace"; ctx.textAlign = "center";
     ctx.fillText(String(Math.round(hdgDeg)).padStart(3, "0"), W / 2, hy + 17);
   }
 
@@ -1132,7 +1133,7 @@ export function createCockpit3d() {
     ctx.moveTo(wpts[0][0], wpts[0][1]);
     for (let i = 1; i < wpts.length; i++) ctx.lineTo(wpts[i][0], wpts[i][1]);
     ctx.stroke();
-    ctx.fillStyle = "#e65fd1"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "left";
+    ctx.fillStyle = "#e65fd1"; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "left";
     wpts.forEach(([wx, wy], i) => {
       ctx.beginPath(); ctx.arc(wx, wy, 5, 0, Math.PI * 2); ctx.fill();
       ctx.fillText("WPT" + (i + 1), wx + 6, wy - 8);
@@ -1153,7 +1154,7 @@ export function createCockpit3d() {
       if (major) {
         const names = { 0: "N", 90: "E", 180: "S", 270: "W" };
         ctx.fillStyle = deg === 0 ? "#ff5a4e" : "#57e6a9";
-        ctx.font = "bold 15px sans-serif";
+        ctx.font = "bold 17px sans-serif";
         ctx.fillText(names[deg] || String(deg / 10), Math.cos(a) * 98, Math.sin(a) * 98);
       }
     }
@@ -1186,7 +1187,7 @@ export function createCockpit3d() {
     const barTop = 64, barH = 110;
     bars.forEach((frac, i) => {
       const bx = 34 + i * 92;
-      ctx.fillStyle = "#bfe2ff"; ctx.font = "bold 17px sans-serif"; ctx.textAlign = "center";
+      ctx.fillStyle = "#bfe2ff"; ctx.font = "bold 19px sans-serif"; ctx.textAlign = "center";
       ctx.fillText(barLabels[i], bx + 15, 52);
       ctx.fillStyle = "#111927";
       ctx.fillRect(bx, barTop, 30, barH);
@@ -1201,7 +1202,7 @@ export function createCockpit3d() {
       const bh = barH * f;
       ctx.fillStyle = f > 0.9 ? "#ffb340" : "#2fbf71";
       ctx.fillRect(bx + 3, barTop + barH - bh, 24, bh);
-      ctx.fillStyle = "#6df2b8"; ctx.font = "bold 18px monospace";
+      ctx.fillStyle = "#6df2b8"; ctx.font = "bold 21px monospace";
       ctx.fillText(barText[i], bx + 15, barTop + barH + 22);
     });
 
@@ -1216,8 +1217,8 @@ export function createCockpit3d() {
       "OIL T " + Math.round(oilT),
       "OIL P " + Math.round(oilP)
     ];
-    ctx.fillStyle = "#e2efff"; ctx.font = "bold 16px monospace"; ctx.textAlign = "left";
-    rows.forEach((row, i) => ctx.fillText(row, 24, 226 + i * 17));
+    ctx.fillStyle = "#e2efff"; ctx.font = "bold 18px monospace"; ctx.textAlign = "left";
+    rows.forEach((row, i) => ctx.fillText(row, 24, 218 + i * 19));
     ctx.textAlign = "center";
   }
 
@@ -1241,7 +1242,7 @@ export function createCockpit3d() {
     drawGaugeFace(ctx, ASI[0], ASI[1], R, "KT", asiTicks,
       { from: 60 / 200, to: 160 / 200, color: "#2fbf71" });
     drawNeedle(ctx, ASI[0], ASI[1], R, knots / 200);
-    ctx.fillStyle = "#ffffff"; ctx.font = "bold 17px sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center";
     ctx.fillText(String(Math.round(knots)), ASI[0], ASI[1] + R * 0.9);
 
     // Attitude indicator (moving ball)
@@ -1281,7 +1282,7 @@ export function createCockpit3d() {
     ctx.fillRect(ALT[0] - 28, ALT[1] + 18, 56, 18);
     ctx.strokeStyle = "#4a5666"; ctx.lineWidth = 1.5;
     ctx.strokeRect(ALT[0] - 28, ALT[1] + 18, 56, 18);
-    ctx.fillStyle = "#6df2b8"; ctx.font = "bold 15px monospace"; ctx.textAlign = "center";
+    ctx.fillStyle = "#6df2b8"; ctx.font = "bold 17px monospace"; ctx.textAlign = "center";
     ctx.fillText(String(Math.round(feet)), ALT[0], ALT[1] + 31);
 
     // Heading indicator (rotating card)
@@ -1308,7 +1309,7 @@ export function createCockpit3d() {
       if (deg % 90 === 0) {
         const names = { 0: "N", 90: "E", 180: "S", 270: "W" };
         ctx.fillStyle = deg === 0 ? "#ff6a5e" : "#ffffff";
-        ctx.font = "bold 15px sans-serif";
+        ctx.font = "bold 16px sans-serif";
         ctx.fillText(names[deg], Math.cos(a) * (R - 22), Math.sin(a) * (R - 22));
       }
     }

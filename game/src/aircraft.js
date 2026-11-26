@@ -66,8 +66,25 @@ function wingHalf(side, opts, redMat, creamMat) {
     return extrudePlanform(outline, thickness, material);
   };
 
+  // Tip panel with chamfered corners so the tip reads shaped, not sawn off.
+  const tipPanel = (s0, s1, material) => {
+    const inset = Math.min(0.5, tipChord * 0.3);   // spanwise corner cut
+    const pull = Math.min(0.55, tipChord * 0.32);  // chordwise corner cut
+    const sIn = s1 - inset;
+    const outline = [
+      [side * s0, leadingEdgeY(s0)],
+      [side * sIn, leadingEdgeY(sIn)],
+      [side * s1, leadingEdgeY(s1) + pull],
+      [side * s1, leadingEdgeY(s1) + chordAt(s1) - pull],
+      [side * sIn, leadingEdgeY(sIn) + chordAt(sIn)],
+      [side * s0, leadingEdgeY(s0) + chordAt(s0)]
+    ];
+    if (side < 0) outline.reverse();
+    return extrudePlanform(outline, thickness, material);
+  };
+
   group.add(panel(0, tipStart, redMat));
-  group.add(panel(tipStart, halfSpan, creamMat));
+  group.add(tipPanel(tipStart, halfSpan, creamMat));
   return group;
 }
 
@@ -135,20 +152,57 @@ export function buildAircraft() {
   const stripeProfile = [[1.52, 6.55], [1.53, 6.95], [1.52, 7.3]];
   plane.add(latheBody(stripeProfile, cream, 6.2));
 
+  // Cream cheatline stripes along both flanks, from behind the cowl to the
+  // tail cone. Each segment is a thin box laid on the lathe surface: at
+  // station s the surface half-width at height y is
+  // 0.88 * sqrt(r(s)^2 - (y/1.06)^2) (the latheBody scale factors).
+  const radiusAt = (s) => {
+    for (let i = 1; i < fuselageProfile.length; i++) {
+      const [r1, s1] = fuselageProfile[i];
+      const [r0, s0] = fuselageProfile[i - 1];
+      if (s <= s1) return r0 + (r1 - r0) * ((s - s0) / (s1 - s0));
+    }
+    return fuselageProfile[fuselageProfile.length - 1][0];
+  };
+  const cheatY = 0.35;
+  const cheatStations = [2.8, 3.6, 4.6, 5.6, 6.6, 7.6, 8.6, 9.6, 10.2];
+  const cheatPoint = (s, side) => {
+    const r = radiusAt(s);
+    const x = 0.88 * Math.sqrt(Math.max(0.01, r * r - (cheatY / 1.06) ** 2));
+    return new THREE.Vector3(side * (x + 0.025), cheatY, 6.2 - s);
+  };
+  for (const side of [-1, 1]) {
+    for (let i = 1; i < cheatStations.length; i++) {
+      const a = cheatPoint(cheatStations[i - 1], side);
+      const b = cheatPoint(cheatStations[i], side);
+      const len = a.distanceTo(b) + 0.06; // slight overlap so segments meet
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.24, len), cream);
+      seg.position.copy(a).add(b).multiplyScalar(0.5);
+      seg.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+      plane.add(seg);
+    }
+  }
+
+  // Dark anti-glare panel on the nose deck, ahead of the windshield.
+  const glarePanel = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.06, 1.2), dark);
+  glarePanel.position.set(0, 1.5, -3.9);
+  glarePanel.rotation.x = -0.09;
+  plane.add(glarePanel);
+
   // --- Canopy: glass bubble on the spine with a red skirt and headrest. ---
   const canopySkirt = new THREE.Mesh(new THREE.CylinderGeometry(1.02, 1.12, 0.55, 12), red);
   canopySkirt.scale.set(0.85, 1, 1.5);
-  canopySkirt.position.set(0, 0.98, -1.55);
+  canopySkirt.position.set(0, 0.98, -1.42);
   plane.add(canopySkirt);
 
   const canopy = new THREE.Mesh(new THREE.SphereGeometry(1.15, 14, 10), glass);
-  canopy.scale.set(0.82, 0.62, 1.55);
-  canopy.position.set(0, 1.12, -1.55);
+  canopy.scale.set(0.82, 0.66, 1.68);
+  canopy.position.set(0, 1.14, -1.42);
   plane.add(canopy);
 
   // Slim centre pillar over the glass.
   const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 2.6), red);
-  pillar.position.set(0, 1.78, -1.55);
+  pillar.position.set(0, 1.85, -1.42);
   plane.add(pillar);
 
   // Headrest fairing tapering from the canopy into the spine.
@@ -227,9 +281,9 @@ export function buildAircraft() {
   const prop = new THREE.Group();
   prop.position.set(0, 0, -6.55);
 
-  const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.52, 1.3, 12), cream);
+  const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.52, 1.45, 12), cream);
   spinner.rotation.x = -Math.PI / 2;
-  spinner.position.z = -0.4;
+  spinner.position.z = -0.47;
   prop.add(spinner);
 
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.4, 10), dark);
@@ -248,8 +302,11 @@ export function buildAircraft() {
   bladeShape.closePath();
   const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, { depth: 0.09, bevelEnabled: false });
   bladeGeo.translate(0, 0, -0.045);
+  // Blades get their own transparent material so they can fade toward the
+  // blur disc at high rpm (see spinPropeller).
+  const bladeMat = new THREE.MeshLambertMaterial({ color: DARK, transparent: true });
   for (const flip of [0, Math.PI]) {
-    const blade = new THREE.Mesh(bladeGeo, dark);
+    const blade = new THREE.Mesh(bladeGeo, bladeMat);
     blade.rotation.order = "ZYX";
     blade.rotation.z = flip;
     blade.rotation.y = 0.5;          // blade pitch
@@ -281,23 +338,27 @@ export function buildAircraft() {
 
   // --- Navigation lights: red left, green right, white tail. ---
   const mkLight = (color, x, y, z) => {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color }));
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color }));
     s.position.set(x, y, z);
     plane.add(s);
   };
-  mkLight(0xff2222, -7.82, 0.18, -1.35);
-  mkLight(0x22ff66, 7.82, 0.18, -1.35);
+  mkLight(0xff2222, -7.8, 0.18, -1.35);
+  mkLight(0x22ff66, 7.8, 0.18, -1.35);
   mkLight(0xffffff, 0, 0.35, 6.25);
 
   plane.userData.prop = prop;
   plane.userData.disc = disc;
+  plane.userData.bladeMat = bladeMat;
   return plane;
 }
 
-// Spin the propeller; faster with throttle, disc fades in when spinning.
+// Spin the propeller; faster with throttle. The blur disc ramps in smoothly
+// with throttle and the blades fade toward it at high rpm, so the prop
+// reads as a blur instead of strobing paddles.
 export function spinPropeller(plane, throttle, dt) {
   const prop = plane.userData.prop;
   const speed = 2 + throttle * 55;
   prop.rotation.z += speed * dt;
-  plane.userData.disc.material.opacity = throttle > 0.05 ? 0.18 : 0.05;
+  plane.userData.disc.material.opacity = 0.04 + throttle * 0.16;
+  if (plane.userData.bladeMat) plane.userData.bladeMat.opacity = 1 - throttle * 0.55;
 }

@@ -41,6 +41,11 @@ const cameras = createCameras();
 const hud = createHud();
 const input = createInput();
 
+// Debug/test hooks for the capture rig (prop-spin measurement, play-tests).
+window.__plane = plane;
+window.__flight = flight;
+window.__cameras = cameras;
+
 // Real 3D cockpit, attached to the camera so it renders in cockpit view.
 // The old 2D cockpitFrame canvas stays hidden; the DOM HUD is unchanged.
 scene.add(camera);
@@ -186,9 +191,10 @@ function stageShot(name) {
     flight.pitch = -0.35; flight.roll = 0.04;
     flight.speed = 70; flight.throttle = 0.8; flight.onGround = false;
     cameras.setMode("chase");
-  } else if (name === "free-side" || name === "free-front") {
+  } else if (name === "free-side" || name === "free-front" || name === "free-top") {
     // Free-orbit camera at a fixed angle, for checking the airframe shape:
-    // side profile, or front-quarter showing nose, wing taper and gear.
+    // side profile, front-quarter showing nose/wing taper/gear, or a
+    // rear-top view showing wing planform, tail and canopy from above.
     const ring = RING_COURSE[0];
     flight.position.set(ring.x + 40, ring.y - 6, ring.z + 330);
     flight.heading = 0;
@@ -196,7 +202,8 @@ function stageShot(name) {
     flight.speed = 62; flight.throttle = 0.72; flight.onGround = false;
     cameras.setMode("free");
     if (name === "free-side") cameras.setFreeOrbit(Math.PI / 2, 0.12, 24);
-    else cameras.setFreeOrbit(Math.PI - 0.7, 0.18, 24);
+    else if (name === "free-front") cameras.setFreeOrbit(Math.PI - 0.7, 0.18, 24);
+    else cameras.setFreeOrbit(0.55, 0.95, 27);
   }
   applyToMesh(flight, plane);
   cameras.update(camera, flight, plane, 1, true);
@@ -228,6 +235,7 @@ function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  window.__gameTime = (window.__gameTime || 0) + dt; // debug hook for capture rig
   if (shot) return; // staging drives its own frames
 
   input.poll();
