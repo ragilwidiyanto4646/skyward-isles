@@ -207,8 +207,10 @@ function updateParticles(mission, dt) {
   const pos = posAttr.array;
   const col = colAttr.array;
   const drag = Math.max(0, 1 - 1.6 * dt);
+  let touched = false;
   for (let i = 0; i < PARTICLE_POOL; i++) {
     if (p.life[i] <= 0) continue;
+    touched = true;
     p.life[i] -= dt;
     const i3 = i * 3;
     if (p.life[i] <= 0) {
@@ -227,8 +229,12 @@ function updateParticles(mission, dt) {
     col[i3 + 1] = p.baseColors[i3 + 1] * fade;
     col[i3 + 2] = p.baseColors[i3 + 2] * fade;
   }
-  posAttr.needsUpdate = true;
-  colAttr.needsUpdate = true;
+  // Only re-upload the buffers when a particle actually moved or died
+  // this frame; an idle pool (the common case) costs no GPU upload.
+  if (touched) {
+    posAttr.needsUpdate = true;
+    colAttr.needsUpdate = true;
+  }
 }
 
 // ---------------------------------------------------------------------------

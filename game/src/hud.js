@@ -11,6 +11,8 @@ import * as THREE from "three";
 import { RING_COURSE } from "./missions.js";
 import { RUNWAYS } from "./terrain.js";
 
+const COMPASS_NAMES = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
+
 export function createHud() {
   const el = (id) => document.getElementById(id);
   const hudEl = el("hud");
@@ -27,6 +29,39 @@ export function createHud() {
 
   let msgTimer = 0;
   const _target = new THREE.Vector3();
+
+  // DOM write caches: hud.update runs every frame, but most readouts only
+  // change a few times per second. Writing textContent/style with the
+  // same value still costs a DOM mutation, so every write goes through
+  // these helpers and is skipped when the value is unchanged.
+  const _lastText = new Map();
+  function setText(el, text) {
+    if (_lastText.get(el) !== text) {
+      el.textContent = text;
+      _lastText.set(el, text);
+    }
+  }
+  const _lastStyle = new Map();
+  function setStyle(el, prop, value) {
+    const key = prop;
+    let perEl = _lastStyle.get(el);
+    if (!perEl) { perEl = {}; _lastStyle.set(el, perEl); }
+    if (perEl[key] !== value) {
+      el.style[prop] = value;
+      perEl[key] = value;
+    }
+  }
+  // Last drawn instrument inputs, for the sub-pixel canvas gates below.
+  let lastCompassHdg = null;
+  let lastHorizonPitch = null;
+  let lastHorizonRoll = null;
+  let lastCameraMode = null;
+  let lastMetaKind = null;
+
+  function angDiffDeg(a, b) {
+    const d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+  }
 
   function fmtTime(sec) {
     const m = Math.floor(sec / 60);
@@ -53,9 +88,8 @@ export function createHud() {
       const deg = ((degAbs % 360) + 360) % 360;
       const x = w / 2 + (degAbs - headingDeg) * pxPerDeg;
       if (deg % 45 === 0) {
-        const names = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
         compassCtx.fillStyle = deg === 0 ? "#ff5a4e" : "#ffffff";
-        compassCtx.fillText(names[deg], x, 15);
+        compassCtx.fillText(COMPASS_NAMES[deg], x, 15);
         compassCtx.fillRect(x - 1, 19, 2, 8);
       } else if (deg % 15 === 0) {
         compassCtx.fillStyle = "#9fd8ff";
@@ -105,23 +139,23 @@ export function createHud() {
   function updateMissionMeta(flight, mission) {
     if (mission.kind === "ring") {
       const total = mission.ringsTotal;
-      ringVal.textContent = "RING " + Math.min(mission.nextRing + 1, total) + "/" + total;
+      setText(ringVal, "RING " + Math.min(mission.nextRing + 1, total) + "/" + total);
       if (mission.nextRing < total) {
         const p = RING_COURSE[mission.nextRing];
         _target.set(p.x, p.y, p.z);
-        distVal.textContent = Math.round(flight.position.distanceTo(_target)) + " m";
+        setText(distVal, Math.round(flight.position.distanceTo(_target)) + " m");
       } else {
-        distVal.textContent = "—";
+        setText(distVal, "—");
       }
-      missionMeta.style.display = "";
     } else if (mission.kind === "hop") {
       const target = RUNWAYS[1];
-      ringVal.textContent = "FAR STRIP";
+      setText(ringVal, "FAR STRIP");
       const d = Math.hypot(flight.position.x - target.x, flight.position.z - target.z);
-      distVal.textContent = Math.round(d) + " m";
-      missionMeta.style.display = "";
-    } else {
-      missionMeta.style.display = "none";
+      setText(distVal, Math.round(d) + " m");
+    }
+    if (mission.kind !== lastMetaKind) {
+      lastMetaKind = mission.kind;
+      missionMeta.style.display = mission.kind === "free" ? "none" : "";
     }
   }
 
@@ -136,32 +170,55 @@ export function createHud() {
       msgTimer = seconds;
     },
     update(flight, mission, cameraMode, dt) {
-      altVal.textContent = String(Math.round(flight.position.y * 3.28));
-      spdVal.textContent = String(Math.round(flight.speed * 1.94));
-      vsiVal.textContent = fmtVsi(flight.verticalSpeed * 196.85);
-      thrVal.textContent = String(Math.round(flight.throttle * 100));
-      throttleBar.style.width = (flight.throttle * 100) + "%";
-      fuelVal.textContent = String(Math.round(mission.fuel));
-      fuelBar.style.width = mission.fuel + "%";
-      fuelBar.style.background = mission.fuel > 25 ? "#ffb340" : "#ff5a4e";
+      setText(altVal, String(Math.round(flight.position.y * 3.28)));
+      setText(spdVal, String(Math.round(flight.speed * 1.94)));
+      setText(vsiVal, fmtVsi(flight.verticalSpeed * 196.85));
+      setText(thrVal, String(Math.round(flight.throttle * 100)));
+      setStyle(throttleBar, "width", (flight.throttle * 100) + "%");
+      setText(fuelVal, String(Math.round(mission.fuel)));
+      setStyle(fuelBar, "width", mission.fuel + "%");
+      setStyle(fuelBar, "background", mission.fuel > 25 ? "#ffb340" : "#ff5a4e");
       const hdg = ((THREE.MathUtils.radToDeg(flight.heading) % 360) + 360) % 360;
-      hdgVal.textContent = String(Math.round(hdg)).padStart(3, "0");
-      scoreVal.textContent = String(mission.score);
-      timerVal.textContent = fmtTime(mission.elapsed);
-      missionTitle.textContent = mission.title;
-      missionText.textContent = mission.objective;
-      missionSub.textContent = mission.detail;
+      setText(hdgVal, String(Math.round(hdg)).padStart(3, "0"));
+      setText(scoreVal, String(mission.score));
+      setText(timerVal, fmtTime(mission.elapsed));
+      setText(missionTitle, mission.title);
+      setText(missionText, mission.objective);
+      setText(missionSub, mission.detail);
       updateMissionMeta(flight, mission);
-      viewVal.textContent =
+      setText(viewVal,
         cameraMode === "cockpit" ? "COCKPIT" :
-        cameraMode === "free" ? "FREE CAM" : "CHASE CAM";
+        cameraMode === "free" ? "FREE CAM" : "CHASE CAM");
       // Compact layout in cockpit view so the DOM HUD clears the 3D
       // overhead panel and standby instruments (see .cockpit in index.html).
-      hudEl.classList.toggle("cockpit", cameraMode === "cockpit");
-      drawCompass(hdg);
+      // Only touch the class list when the mode actually changes.
+      if (cameraMode !== lastCameraMode) {
+        const modeChanged = lastCameraMode !== null;
+        lastCameraMode = cameraMode;
+        hudEl.classList.toggle("cockpit", cameraMode === "cockpit");
+        // Force one horizon redraw when returning from cockpit view,
+        // where the DOM horizon was hidden and not drawn.
+        if (modeChanged) { lastHorizonPitch = null; lastHorizonRoll = null; }
+      }
+      // Compass strip: 2.2 px per degree, so a heading change under
+      // 0.05 deg moves the strip by ~0.1 px — skip those redraws.
+      if (lastCompassHdg === null || angDiffDeg(hdg, lastCompassHdg) > 0.05) {
+        drawCompass(hdg);
+        lastCompassHdg = hdg;
+      }
       // The DOM horizon is hidden in cockpit view (the 3D PFD carries
-      // attitude there), so skip drawing it.
-      if (cameraMode !== "cockpit") drawHorizon(flight.pitch, flight.roll);
+      // attitude there), so skip drawing it. Elsewhere the pitch offset
+      // is 90 px per radian, so changes under 0.0015 rad (~0.14 px,
+      // 0.09 deg of roll) cannot move a pixel — skip those redraws too.
+      if (cameraMode !== "cockpit") {
+        if (lastHorizonPitch === null ||
+            Math.abs(flight.pitch - lastHorizonPitch) > 0.0015 ||
+            Math.abs(flight.roll - lastHorizonRoll) > 0.0015) {
+          drawHorizon(flight.pitch, flight.roll);
+          lastHorizonPitch = flight.pitch;
+          lastHorizonRoll = flight.roll;
+        }
+      }
       if (msgTimer > 0) {
         msgTimer -= dt;
         if (msgTimer <= 0) centerMsg.textContent = "";

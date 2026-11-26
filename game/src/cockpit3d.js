@@ -929,8 +929,42 @@ export function createCockpit3d() {
   const GAUGE_A0 = Math.PI * 0.75;
   const GAUGE_A1 = Math.PI * 2.25;
 
+  // Static screen data, built once: cardinal names, gauge tick tables,
+  // the ND route waypoints and the engine bar labels never change, so
+  // the per-frame draw functions must not rebuild them.
+  const NAMES4 = { 0: "N", 90: "E", 180: "S", 270: "W" };
+  const ASI_TICKS = [];
+  for (let kt = 0; kt <= 200; kt += 20) {
+    const showNum = kt % 40 === 0 && kt > 0 && kt < 200;
+    ASI_TICKS.push({ frac: kt / 200, major: true, text: showNum ? String(kt) : "" });
+  }
+  const ASI_ARC = { from: 60 / 200, to: 160 / 200, color: "#2fbf71" };
+  const ALT_TICKS = [];
+  for (let f = 0; f < 10; f++) ALT_TICKS.push({ frac: f / 10, major: true, text: String(f) });
+  const ND_CX = nd.w / 2, ND_CY = nd.h / 2 + 10;
+  const ND_WPTS = [[ND_CX - 72, ND_CY + 66], [ND_CX - 10, ND_CY - 8], [ND_CX + 56, ND_CY - 72], [ND_CX + 94, ND_CY - 26]];
+  const ENG_BAR_LABELS = ["N1", "EGT", "FF"];
+
   function gaugeAngle(frac) {
     return GAUGE_A0 + (GAUGE_A1 - GAUGE_A0) * THREE.MathUtils.clamp(frac, 0, 1);
+  }
+
+  // Gauge face gradients depend only on (cx, cy, r), which are fixed per
+  // gauge; cache them instead of creating one per gauge per frame. They
+  // are always filled under an identity transform, so reuse is exact.
+  const gaugeGradients = {};
+  let hdgCardGradient = null;
+  function gaugeGradient(ctx, cx, cy, r) {
+    const key = cx + "," + cy + "," + r;
+    let grad = gaugeGradients[key];
+    if (!grad) {
+      grad = ctx.createRadialGradient(cx, cy, r * 0.15, cx, cy, r);
+      grad.addColorStop(0, "#26344a");
+      grad.addColorStop(0.75, "#16202f");
+      grad.addColorStop(1, "#0d1420");
+      gaugeGradients[key] = grad;
+    }
+    return grad;
   }
 
   function drawGaugeFace(ctx, cx, cy, r, label, ticks, arc) {
@@ -938,10 +972,7 @@ export function createCockpit3d() {
     ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "#6b7a8d"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, Math.PI * 2); ctx.stroke();
-    const grad = ctx.createRadialGradient(cx, cy, r * 0.15, cx, cy, r);
-    grad.addColorStop(0, "#26344a");
-    grad.addColorStop(0.75, "#16202f");
-    grad.addColorStop(1, "#0d1420");
+    const grad = gaugeGradient(ctx, cx, cy, r);
     ctx.fillStyle = grad;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
     if (arc) {
@@ -1095,9 +1126,8 @@ export function createCockpit3d() {
       const tx = W / 2 + (hd - hdgDeg) * pxPerDeg;
       ctx.beginPath(); ctx.moveTo(tx, hy + 18); ctx.lineTo(tx, hy + 26); ctx.stroke();
       if (deg % 90 === 0) {
-        const names = { 0: "N", 90: "E", 180: "S", 270: "W" };
         ctx.fillStyle = deg === 0 ? "#ff5a4e" : "#ffffff";
-        ctx.fillText(names[deg], tx, hy + 15);
+        ctx.fillText(NAMES4[deg], tx, hy + 15);
         ctx.fillStyle = "#ffffff";
       } else if (deg % 30 === 0) {
         ctx.fillText(String(deg / 10), tx, hy + 15);
@@ -1127,7 +1157,7 @@ export function createCockpit3d() {
       ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.stroke();
     }
     // Magenta route with waypoints
-    const wpts = [[cx - 72, cy + 66], [cx - 10, cy - 8], [cx + 56, cy - 72], [cx + 94, cy - 26]];
+    const wpts = ND_WPTS;
     ctx.strokeStyle = "#e65fd1"; ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(wpts[0][0], wpts[0][1]);
@@ -1152,10 +1182,9 @@ export function createCockpit3d() {
       ctx.lineTo(Math.cos(a) * (major ? 124 : 118), Math.sin(a) * (major ? 124 : 118));
       ctx.stroke();
       if (major) {
-        const names = { 0: "N", 90: "E", 180: "S", 270: "W" };
         ctx.fillStyle = deg === 0 ? "#ff5a4e" : "#57e6a9";
         ctx.font = "bold 17px sans-serif";
-        ctx.fillText(names[deg] || String(deg / 10), Math.cos(a) * 98, Math.sin(a) * 98);
+        ctx.fillText(NAMES4[deg] || String(deg / 10), Math.cos(a) * 98, Math.sin(a) * 98);
       }
     }
     ctx.restore();
@@ -1183,7 +1212,7 @@ export function createCockpit3d() {
     const ff = 4 + flight.throttle * 38;     // gal/h
     const bars = [n1 / 100, (egt - 300) / 600, ff / 45];
     const barText = [String(Math.round(n1)), String(Math.round(egt)), ff.toFixed(1)];
-    const barLabels = ["N1", "EGT", "FF"];
+    const barLabels = ENG_BAR_LABELS;
     const barTop = 64, barH = 110;
     bars.forEach((frac, i) => {
       const bx = 34 + i * 92;
@@ -1234,13 +1263,7 @@ export function createCockpit3d() {
     const ASI = [82, 104], ATT = [238, 104], ALT = [82, 238], HDG = [238, 238];
 
     // Airspeed indicator
-    const asiTicks = [];
-    for (let kt = 0; kt <= 200; kt += 20) {
-      const showNum = kt % 40 === 0 && kt > 0 && kt < 200;
-      asiTicks.push({ frac: kt / 200, major: true, text: showNum ? String(kt) : "" });
-    }
-    drawGaugeFace(ctx, ASI[0], ASI[1], R, "KT", asiTicks,
-      { from: 60 / 200, to: 160 / 200, color: "#2fbf71" });
+    drawGaugeFace(ctx, ASI[0], ASI[1], R, "KT", ASI_TICKS, ASI_ARC);
     drawNeedle(ctx, ASI[0], ASI[1], R, knots / 200);
     ctx.fillStyle = "#ffffff"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center";
     ctx.fillText(String(Math.round(knots)), ASI[0], ASI[1] + R * 0.9);
@@ -1274,9 +1297,7 @@ export function createCockpit3d() {
     ctx.beginPath(); ctx.arc(ATT[0], ATT[1], 3.5, 0, Math.PI * 2); ctx.fill();
 
     // Altimeter
-    const altTicks = [];
-    for (let f = 0; f < 10; f++) altTicks.push({ frac: f / 10, major: true, text: String(f) });
-    drawGaugeFace(ctx, ALT[0], ALT[1], R, "", altTicks, null);
+    drawGaugeFace(ctx, ALT[0], ALT[1], R, "", ALT_TICKS, null);
     drawNeedle(ctx, ALT[0], ALT[1], R, (feet % 1000) / 1000);
     ctx.fillStyle = "#0b0e13";
     ctx.fillRect(ALT[0] - 28, ALT[1] + 18, 56, 18);
@@ -1292,9 +1313,11 @@ export function createCockpit3d() {
     ctx.beginPath(); ctx.arc(HDG[0], HDG[1], R + 4, 0, Math.PI * 2); ctx.stroke();
     ctx.save();
     ctx.beginPath(); ctx.arc(HDG[0], HDG[1], R, 0, Math.PI * 2); ctx.clip();
-    const grad = ctx.createRadialGradient(HDG[0], HDG[1], R * 0.15, HDG[0], HDG[1], R);
-    grad.addColorStop(0, "#1d2735"); grad.addColorStop(1, "#0a0f18");
-    ctx.fillStyle = grad; ctx.fillRect(HDG[0] - R, HDG[1] - R, R * 2, R * 2);
+    if (!hdgCardGradient) {
+      hdgCardGradient = ctx.createRadialGradient(HDG[0], HDG[1], R * 0.15, HDG[0], HDG[1], R);
+      hdgCardGradient.addColorStop(0, "#1d2735"); hdgCardGradient.addColorStop(1, "#0a0f18");
+    }
+    ctx.fillStyle = hdgCardGradient; ctx.fillRect(HDG[0] - R, HDG[1] - R, R * 2, R * 2);
     ctx.translate(HDG[0], HDG[1]);
     ctx.rotate(-THREE.MathUtils.degToRad(hdgDeg));
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1307,10 +1330,9 @@ export function createCockpit3d() {
       ctx.lineTo(Math.cos(a) * (R - (major ? 12 : 8)), Math.sin(a) * (R - (major ? 12 : 8)));
       ctx.stroke();
       if (deg % 90 === 0) {
-        const names = { 0: "N", 90: "E", 180: "S", 270: "W" };
         ctx.fillStyle = deg === 0 ? "#ff6a5e" : "#ffffff";
         ctx.font = "bold 16px sans-serif";
-        ctx.fillText(names[deg], Math.cos(a) * (R - 22), Math.sin(a) * (R - 22));
+        ctx.fillText(NAMES4[deg], Math.cos(a) * (R - 22), Math.sin(a) * (R - 22));
       }
     }
     ctx.restore();
@@ -1328,19 +1350,51 @@ export function createCockpit3d() {
   }
 
   // ---- Per-frame update ------------------------------------------------------
+  // Each glass screen is redrawn (and its texture re-uploaded) only when
+  // the values it displays moved beyond a sub-pixel epsilon: at the
+  // epsilons below, tapes/needles/rose shift by < 0.3 px and every
+  // digital readout keeps its rounded value, so a skipped redraw is
+  // indistinguishable from a fresh one. In steady flight (level cruise,
+  // parked) most frames skip most screens; in manoeuvring flight the
+  // values move every frame and the displays stay fully live.
+  const lastDrawn = { knots: NaN, feet: NaN, hdgDeg: NaN, pitch: NaN, roll: NaN, throttle: NaN, fuel: NaN };
+  function angDiffDeg(a, b) {
+    const d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+  }
   function update(flight, fuel) {
     const knots = flight.speed * 1.94;
     const feet = flight.position.y * 3.28;
     const hdgDeg = ((THREE.MathUtils.radToDeg(flight.heading) % 360) + 360) % 360;
 
-    drawPFD(flight, knots, feet, hdgDeg);
-    drawND(hdgDeg);
-    drawENG(flight, fuel);
-    drawSTBY(flight, knots, feet, hdgDeg);
-    pfd.texture.needsUpdate = true;
-    nd.texture.needsUpdate = true;
-    eng.texture.needsUpdate = true;
-    stby.texture.needsUpdate = true;
+    const hdgMoved = !(angDiffDeg(hdgDeg, lastDrawn.hdgDeg) <= 0.05);
+    const attitudeMoved = hdgMoved ||
+      !(Math.abs(knots - lastDrawn.knots) <= 0.1) ||
+      !(Math.abs(feet - lastDrawn.feet) <= 0.5) ||
+      !(Math.abs(flight.pitch - lastDrawn.pitch) <= 0.0015) ||
+      !(Math.abs(flight.roll - lastDrawn.roll) <= 0.0015);
+    if (attitudeMoved) {
+      drawPFD(flight, knots, feet, hdgDeg);
+      drawSTBY(flight, knots, feet, hdgDeg);
+      pfd.texture.needsUpdate = true;
+      stby.texture.needsUpdate = true;
+    }
+    if (hdgMoved) {
+      drawND(hdgDeg);
+      nd.texture.needsUpdate = true;
+    }
+    if (!(Math.abs(flight.throttle - lastDrawn.throttle) <= 0.0005) ||
+        Math.round(fuel) !== Math.round(lastDrawn.fuel)) {
+      drawENG(flight, fuel);
+      eng.texture.needsUpdate = true;
+    }
+    lastDrawn.knots = knots;
+    lastDrawn.feet = feet;
+    lastDrawn.hdgDeg = hdgDeg;
+    lastDrawn.pitch = flight.pitch;
+    lastDrawn.roll = flight.roll;
+    lastDrawn.throttle = flight.throttle;
+    lastDrawn.fuel = fuel;
 
     // Annunciator lamps: LOW FUEL, STALL, GEAR, OIL, ALT.
     const oilP = 40 + flight.throttle * 35;

@@ -61,22 +61,35 @@ export function initTerrainSeed(seed) {
 let waterMesh = null;
 let waterBase = null;
 let waterMat = null;
+// Per-vertex wave phases [x * WATER_KX, z * WATER_KZ], precomputed once in
+// buildTerrain: the spatial part of each sine never changes, so the
+// per-frame loop only adds the time term instead of re-deriving it.
+let waterPhase = null;
+let waterLastVertexUpdate = -Infinity;
+const WATER_KX = Math.PI * 2 / 200;
+const WATER_KZ = Math.PI * 2 / 110;
 
 // Gentle two-sine wave field on the water plane plus a slow shininess
 // shimmer for sun glitter. Normals are left alone to keep it cheap.
+// The waves evolve slowly (0.6 / 0.9 rad/s), so vertex updates are
+// time-gated to 30 Hz: at 60 fps the surface moves < 0.02 units between
+// updates, which is visually identical, and the gate halves both the CPU
+// sine loop (9,409 vertices) and the full-buffer GPU re-upload. The
+// shininess shimmer is a single scalar and still updates every call.
 export function updateWater(timeSeconds) {
   if (!waterMesh) return;
+  const t = timeSeconds;
+  waterMat.shininess = 90 + Math.sin(t * 0.7) * 18;
+  if (t - waterLastVertexUpdate < 1 / 30) return;
+  waterLastVertexUpdate = t;
   const pos = waterMesh.geometry.attributes.position;
   const arr = pos.array;
-  const t = timeSeconds;
+  const ph = waterPhase;
   for (let i = 0; i < pos.count; i++) {
-    const x = waterBase[i * 3];
-    const z = waterBase[i * 3 + 2];
-    arr[i * 3 + 1] = 0.18 * Math.sin(x * (Math.PI * 2 / 200) + t * 0.6)
-      + 0.12 * Math.sin(z * (Math.PI * 2 / 110) + t * 0.9);
+    arr[i * 3 + 1] = 0.18 * Math.sin(ph[i * 2] + t * 0.6)
+      + 0.12 * Math.sin(ph[i * 2 + 1] + t * 0.9);
   }
   pos.needsUpdate = true;
-  waterMat.shininess = 90 + Math.sin(t * 0.7) * 18;
 }
 
 // Raw island height before runway flattening. Three noise octaves plus a
@@ -109,18 +122,27 @@ function islandHeight(x, z) {
 }
 
 // Distance from a point to a runway rectangle in runway-local space.
-export function runwayLocal(x, z, rw) {
+// runwayLocalInto writes into a caller-supplied object so per-frame
+// callers (heightAt, flight ground checks) allocate nothing; runwayLocal
+// keeps the allocating form for build-time callers that destructure.
+export function runwayLocalInto(x, z, rw, out) {
   const dx = x - rw.x, dz = z - rw.z;
   const c = Math.cos(-rw.heading), s = Math.sin(-rw.heading);
-  const lx = dx * c - dz * s;
-  const lz = dx * s + dz * c;
-  return { lx, lz };
+  out.lx = dx * c - dz * s;
+  out.lz = dx * s + dz * c;
+  return out;
 }
+
+export function runwayLocal(x, z, rw) {
+  return runwayLocalInto(x, z, rw, { lx: 0, lz: 0 });
+}
+
+const _rwLocal = { lx: 0, lz: 0 };
 
 export function heightAt(x, z) {
   let h = islandHeight(x, z);
   for (const rw of RUNWAYS) {
-    const { lx, lz } = runwayLocal(x, z, rw);
+    const { lx, lz } = runwayLocalInto(x, z, rw, _rwLocal);
     const halfL = rw.length / 2 + 300;
     const halfW = rw.width / 2 + 150;
     if (Math.abs(lx) < halfW && Math.abs(lz) < halfL) {
@@ -231,6 +253,12 @@ export function buildTerrain(scene) {
   waterMesh = new THREE.Mesh(waterGeo, waterMat);
   waterMesh.position.y = 0;
   waterBase = new Float32Array(wPos.array);
+  // Precompute the spatial wave phase per vertex for updateWater.
+  waterPhase = new Float32Array(wPos.count * 2);
+  for (let i = 0; i < wPos.count; i++) {
+    waterPhase[i * 2] = wPos.getX(i) * WATER_KX;
+    waterPhase[i * 2 + 1] = wPos.getZ(i) * WATER_KZ;
+  }
   scene.add(waterMesh);
 
   for (const rw of RUNWAYS) scene.add(buildRunway(rw));

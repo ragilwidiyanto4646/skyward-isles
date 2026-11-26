@@ -1,6 +1,6 @@
 // flight.js — arcade flight model: throttle, banked turns, stall sink, ground handling.
 import * as THREE from "three";
-import { heightAt, RUNWAYS, runwayLocal } from "./terrain.js";
+import { heightAt, RUNWAYS, runwayLocalInto } from "./terrain.js";
 
 export const FLIGHT = {
   MAX_SPEED: 95,      // world units per second at full throttle
@@ -126,9 +126,11 @@ export function updateFlight(state, input, dt) {
   state.position.y = Math.min(state.position.y, 900);
 }
 
+const _rwLocal = { lx: 0, lz: 0 };
+
 export function isOnRunway(x, z) {
   for (const rw of RUNWAYS) {
-    const { lx, lz } = runwayLocal(x, z, rw);
+    const { lx, lz } = runwayLocalInto(x, z, rw, _rwLocal);
     if (Math.abs(lx) < rw.width / 2 + 6 && Math.abs(lz) < rw.length / 2 + 6) return true;
   }
   return false;
@@ -136,7 +138,7 @@ export function isOnRunway(x, z) {
 
 export function whichRunway(x, z) {
   for (const rw of RUNWAYS) {
-    const { lx, lz } = runwayLocal(x, z, rw);
+    const { lx, lz } = runwayLocalInto(x, z, rw, _rwLocal);
     if (Math.abs(lx) < rw.width / 2 + 6 && Math.abs(lz) < rw.length / 2 + 6) return rw;
   }
   return null;
