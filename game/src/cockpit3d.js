@@ -21,6 +21,8 @@ export function createCockpit3d() {
   const metalMat = new THREE.MeshLambertMaterial({ color: 0x4a5666 });
   const toggleMat = new THREE.MeshLambertMaterial({ color: 0x9fb4c9 });
   const yokeMat = new THREE.MeshLambertMaterial({ color: 0x1d232d });
+  // Dark carpet for the cockpit floor (tub enclosure, see below).
+  const carpetMat = new THREE.MeshLambertMaterial({ color: 0x1c232e });
 
   // ---- Small helpers -------------------------------------------------------
   function box(w, h, d, mat, x, y, z) {
@@ -250,6 +252,13 @@ export function createCockpit3d() {
     toggles.forEach((t, i) => toggleGlyph(c, X, Y, S, -0.7 + i * 0.2, -0.372, t, i % 3 !== 2));
   }));
 
+  // Knee panel: continues the center panel face downward so the void under
+  // the panel is closed. Spans local y -0.375..-1.025 (overlapping the slab
+  // bottom edge at -0.4) and tilts a little further than the panel itself.
+  const centerKnee = box(1.7, 0.65, 0.12, panelSideMat, 0, -0.7, -0.06);
+  centerKnee.rotation.x = -0.12;
+  center.add(centerKnee);
+
   // Annunciator lamps under the center displays (lit state set in update()).
   const lampMats = [];
   const lampColors = [0xff5a4e, 0xff5a4e, 0x2fbf71, 0xffb340, 0xffb340];
@@ -289,6 +298,10 @@ export function createCockpit3d() {
   });
   leftFace.position.x = -0.46;
   leftHinge.add(leftFace);
+  // Knee panel under the left section, same treatment as the center one.
+  const leftKnee = box(0.92, 0.65, 0.12, panelSideMat, -0.46, -0.7, -0.06);
+  leftKnee.rotation.x = -0.12;
+  leftHinge.add(leftKnee);
 
   // Right section (engine page), mirrored.
   const rightHinge = new THREE.Group();
@@ -315,6 +328,10 @@ export function createCockpit3d() {
   });
   rightFace.position.x = 0.46;
   rightHinge.add(rightFace);
+  // Knee panel under the right section, same treatment as the center one.
+  const rightKnee = box(0.92, 0.65, 0.12, panelSideMat, 0.46, -0.7, -0.06);
+  rightKnee.rotation.x = -0.12;
+  rightHinge.add(rightKnee);
 
   // ---- Windshield frame: pillars + header bar ------------------------------
   // Two tapered outer posts angling up and outward from the panel corners,
@@ -470,13 +487,30 @@ export function createCockpit3d() {
     overhead.add(tog);
   }
 
+  // Overhead cheeks: angled filler panels bridging the overhead panel ends
+  // (x = ±0.75) out toward the windshield pillars, so no sky shows under
+  // the overhead edges. Yawed like the panel side sections (outer edge
+  // swept back) and pitched partway toward the overhead panel's tilt.
+  for (const side of [-1, 1]) {
+    const cheek = box(0.75, 0.55, 0.06, panelMat, side * 1.08, 0.92, -1.62);
+    cheek.rotation.order = "YXZ";
+    cheek.rotation.y = side * 0.55;
+    cheek.rotation.x = 0.5;
+    group.add(cheek);
+  }
+  // Ceiling: closes the top of the tub above the overhead panel and header.
+  group.add(box(3.4, 0.06, 1.5, trimMat, 0, 1.3, -1.25));
+
   // ---- Center pedestal ---------------------------------------------------------
   // Fills the void below the panel: a radio stack printed on a static
   // canvas face (COM/NAV/XPDR with digit windows), toggle glyphs below.
   const pedestal = new THREE.Group();
   pedestal.position.set(0, -0.95, -1.45);
   group.add(pedestal);
-  pedestal.add(box(0.7, 0.55, 0.3, panelMat, 0, 0, 0));
+  // Tall pedestal body running from just below the panel down through the
+  // floor line (world y -1.57..-0.67). The z offset keeps the front face at
+  // local z = +0.15 so the radio face plane below stays exactly in place.
+  pedestal.add(box(0.72, 0.9, 0.32, panelMat, 0, -0.17, -0.01));
 
   const pedCanvas = document.createElement("canvas");
   pedCanvas.width = 512;
@@ -584,6 +618,12 @@ export function createCockpit3d() {
   );
   pedFace.position.z = 0.152;
   pedestal.add(pedFace);
+
+  // Sloped bridge panel (camera space) connecting the pedestal top back to
+  // the bottom of the instrument panel, closing the slot between them.
+  const bridge = box(0.72, 0.05, 0.5, panelMat, 0, -0.72, -1.42);
+  bridge.rotation.x = 0.45;
+  group.add(bridge);
 
   // ---- Standby compass on the glareshield --------------------------------------
   const compass = new THREE.Group();
@@ -695,6 +735,36 @@ export function createCockpit3d() {
     knob.position.set(lx, -0.487, -1.193);
     group.add(knob);
   });
+
+  // ---- Cockpit tub enclosure ---------------------------------------------------
+  // Floor, side walls and console drop panels close the shell so terrain is
+  // only visible through the windshield. Together with the knee panels,
+  // pedestal, overhead cheeks and ceiling above, the cockpit reads as an
+  // enclosed tub instead of a panel floating in space.
+  //
+  // Floor: carpet slab under the panel, wide enough to meet both side walls
+  // and deep enough to run from ahead of the knee panels back past the pilot.
+  group.add(box(3.6, 0.06, 1.9, carpetMat, 0, -1.36, -1.25));
+  // Rudder pedals on the floor ahead of the pedestal, each on a short arm
+  // angling up and back toward the pilot.
+  for (const side of [-1, 1]) {
+    const pedal = box(0.17, 0.05, 0.24, metalMat, side * 0.2, -1.27, -1.6);
+    pedal.rotation.x = -0.45;
+    group.add(pedal);
+    group.add(postBetween(side * 0.2, -1.27, -1.6, side * 0.2, -1.02, -1.42, 0.025, 0.025, metalMat));
+  }
+  // Side walls: vertical panels outboard of the consoles, from the floor up
+  // past the panel's mid-height, closing the view through the sides.
+  for (const side of [-1, 1]) {
+    group.add(box(0.08, 1.55, 1.7, panelSideMat, side * 1.64, -0.58, -1.32));
+    // Drop panel under each side console, console underside to floor.
+    group.add(box(0.4, 0.72, 0.72, panelSideMat, side * 0.82, -1.04, -1.18));
+    // Upper side filler: continues the side wall from its top edge up to
+    // the ceiling, closing the sky gap outboard of the windshield pillars
+    // (verified by capture — the wall alone left the top corners open).
+    // Offset 5mm outboard so its inner face is not coplanar with the wall's.
+    group.add(box(0.08, 1.2, 1.7, panelSideMat, side * 1.645, 0.74, -1.32));
+  }
 
   // ---- Cockpit light -----------------------------------------------------------
   // Soft warm light so the panel reads at every heading. Short range keeps
