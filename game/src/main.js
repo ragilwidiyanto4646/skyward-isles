@@ -1,6 +1,6 @@
 // main.js — boot, renderer, game loop, screens, screenshot staging.
 import * as THREE from "three";
-import { createSky } from "./sky.js";
+import { createSky, SKY_PRESET_NAMES } from "./sky.js";
 import { initTerrainSeed, buildTerrain, heightAt, RUNWAYS, updateWater } from "./terrain.js";
 import { buildAircraft, spinPropeller } from "./aircraft.js";
 import { createFlightState, updateFlight, applyToMesh, resetFlight } from "./flight.js";
@@ -13,6 +13,7 @@ import { createMission, buildMissionObjects, updateMission, RING_COURSE } from "
 const params = new URLSearchParams(location.search);
 const seed = parseInt(params.get("seed") || "1", 10) || 1;
 const shot = params.get("shot");
+const skyParam = SKY_PRESET_NAMES.includes(params.get("sky")) ? params.get("sky") : "day";
 
 initTerrainSeed(seed);
 
@@ -20,12 +21,16 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+// ACES filmic tone mapping rolls off the bright sky/sun so island detail
+// keeps contrast; exposure is set per sky preset (see sky.js). Cockpit
+// glass displays use toneMapped:false materials, so they stay legible.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
 document.getElementById("app").appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.5, 9000);
 
-createSky(scene);
+const sky = createSky(scene, skyParam, renderer);
 buildTerrain(scene);
 
 const plane = buildAircraft();
@@ -165,6 +170,22 @@ function stageShot(name) {
     flight.pitch = -0.06; flight.roll = 0.08;
     flight.speed = 70; flight.throttle = 0.8; flight.onGround = false;
     cameras.setMode("chase");
+  } else if (name === "sky-day" || name === "sky-sunset" || name === "sky-cloudy") {
+    // Panorama vantage with the preset forced by the shot name, pitched
+    // level enough that the horizon band, islands and clouds share frame.
+    sky.setPreset(name.slice(4));
+    flight.position.set(150, 520, 1950);
+    flight.heading = -0.25;
+    flight.pitch = -0.03; flight.roll = 0.04;
+    flight.speed = 70; flight.throttle = 0.8; flight.onGround = false;
+    cameras.setMode("chase");
+  } else if (name === "sky-aerial") {
+    // High altitude looking down across the islands (default day preset).
+    flight.position.set(150, 980, 2400);
+    flight.heading = -0.25;
+    flight.pitch = -0.35; flight.roll = 0.04;
+    flight.speed = 70; flight.throttle = 0.8; flight.onGround = false;
+    cameras.setMode("chase");
   } else if (name === "free-side" || name === "free-front") {
     // Free-orbit camera at a fixed angle, for checking the airframe shape:
     // side profile, or front-quarter showing nose, wing taper and gear.
@@ -220,6 +241,12 @@ function loop(now) {
   if (input.consumeViewToggle() && gameState === "flying") {
     cameras.toggle();
     refreshCockpit();
+  }
+  if (input.consumeSkyToggle()) {
+    // Cycle day -> sunset -> cloudy; works on the title screen too.
+    const next = SKY_PRESET_NAMES[(SKY_PRESET_NAMES.indexOf(sky.getPreset()) + 1) % SKY_PRESET_NAMES.length];
+    sky.setPreset(next);
+    hud.flashMessage("SKY: " + next.toUpperCase());
   }
 
   if (gameState === "flying" && mission) {

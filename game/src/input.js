@@ -12,6 +12,7 @@ export function createInput() {
     viewTogglePressed: false,
     pausePressed: false,
     restartPressed: false,
+    skyTogglePressed: false,
     // Free-camera orbit: when orbitMode is on (set by main.js while the free
     // camera is active), mouse drags and wheel turns are reported as orbit
     // deltas instead of flight pitch/roll. poll() publishes one frame's
@@ -32,6 +33,7 @@ export function createInput() {
       if (k === "c") state.viewTogglePressed = true;
       if (k === "p") state.pausePressed = true;
       if (k === "r") state.restartPressed = true;
+      if (k === "t") state.skyTogglePressed = true;
     }
     state.keys.add(k);
   });
@@ -100,6 +102,11 @@ export function createInput() {
   state.consumeRestart = function () {
     const v = state.restartPressed;
     state.restartPressed = false;
+    return v;
+  };
+  state.consumeSkyToggle = function () {
+    const v = state.skyTogglePressed;
+    state.skyTogglePressed = false;
     return v;
   };
 
