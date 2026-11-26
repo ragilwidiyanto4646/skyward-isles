@@ -878,7 +878,9 @@ export function createHud() {
       viewVal.textContent = cameraMode === "cockpit" ? "COCKPIT" : "CHASE CAM";
       drawCompass(hdg);
       drawHorizon(flight.pitch, flight.roll);
-      if (cameraMode === "cockpit") drawCockpitFrame(flight, mission.fuel);
+      // The 2D cockpitFrame overlay is retired: cockpit view now renders the
+      // real 3D cockpit from cockpit3d.js. drawCockpitFrame is kept above
+      // for reference but no longer drawn.
       if (msgTimer > 0) {
         msgTimer -= dt;
         if (msgTimer <= 0) centerMsg.textContent = "";

@@ -5,6 +5,7 @@ import { initTerrainSeed, buildTerrain, heightAt, RUNWAYS } from "./terrain.js";
 import { buildAircraft, spinPropeller } from "./aircraft.js";
 import { createFlightState, updateFlight, applyToMesh, resetFlight } from "./flight.js";
 import { createCameras } from "./camera.js";
+import { createCockpit3d } from "./cockpit3d.js";
 import { createHud } from "./hud.js";
 import { createInput } from "./input.js";
 import { createMission, buildMissionObjects, updateMission, RING_COURSE } from "./missions.js";
@@ -34,6 +35,17 @@ const flight = createFlightState();
 const cameras = createCameras();
 const hud = createHud();
 const input = createInput();
+
+// Real 3D cockpit, attached to the camera so it renders in cockpit view.
+// The old 2D cockpitFrame canvas stays hidden; the DOM HUD is unchanged.
+scene.add(camera);
+const cockpit3d = createCockpit3d();
+camera.add(cockpit3d.group);
+cockpit3d.group.visible = false;
+function refreshCockpit() {
+  cockpit3d.group.visible = cameras.mode === "cockpit";
+  hud.setCockpitVisible(false);
+}
 
 let mission = null;
 let gameState = "title"; // title | flying | paused | ended
@@ -77,7 +89,7 @@ function startMission(kind) {
   buildMissionObjects(scene, mission);
   resetFlight(flight, 0);
   cameras.setMode("chase");
-  hud.setCockpitVisible(false);
+  refreshCockpit();
   hud.show();
   hideScreens();
   gameState = "flying";
@@ -86,6 +98,7 @@ function startMission(kind) {
 
 function endMission() {
   gameState = "ended";
+  cockpit3d.group.visible = false;
   const won = mission.finished;
   $("endTitle").textContent = won ? "MISSION COMPLETE!" : "MISSION FAILED";
   $("endText").textContent = mission.finishReason || "Flight over.";
@@ -136,13 +149,14 @@ function stageShot(name) {
     flight.pitch = -0.22; flight.roll = 0.03;
     flight.speed = 48; flight.throttle = 0.45; flight.onGround = false;
     cameras.setMode("cockpit");
-    hud.setCockpitVisible(true);
+    refreshCockpit();
   } else if (name === "runway") {
-    // Low pass beside the runway and town at golden hour.
-    flight.position.set(35, 90, 560);
-    flight.heading = 0.05;
-    flight.pitch = -0.04; flight.roll = 0.22;
-    flight.speed = 58; flight.throttle = 0.66; flight.onGround = false;
+    // On final approach to Home Runway: chase camera behind and above the
+    // aircraft, the strip ahead centre-frame with detailed ground below.
+    flight.position.set(0, 95, 640);
+    flight.heading = 0;
+    flight.pitch = -0.05; flight.roll = 0.04;
+    flight.speed = 58; flight.throttle = 0.6; flight.onGround = false;
     cameras.setMode("chase");
   } else if (name === "panorama") {
     // High wide shot: several islands and the ring course.
@@ -155,6 +169,7 @@ function stageShot(name) {
   applyToMesh(flight, plane);
   cameras.update(camera, flight, plane, 1, true);
   hud.update(flight, mission, cameras.mode, 0);
+  if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
   renderer.render(scene, camera);
   // A few more frames so instanced meshes and fog settle, then signal ready.
   let frames = 0;
@@ -163,6 +178,7 @@ function stageShot(name) {
     spinPropeller(plane, flight.throttle, 0.016);
     cameras.update(camera, flight, plane, 0.016, true);
     hud.update(flight, mission, cameras.mode, 0);
+    if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
     renderer.render(scene, camera);
     frames++;
     if (frames >= 6) window.__shotReady = true;
@@ -188,8 +204,8 @@ function loop(now) {
     else { gameState = "flying"; hideScreens(); }
   }
   if (input.consumeViewToggle() && gameState === "flying") {
-    const mode = cameras.toggle();
-    hud.setCockpitVisible(mode === "cockpit");
+    cameras.toggle();
+    refreshCockpit();
   }
 
   if (gameState === "flying" && mission) {
@@ -199,6 +215,7 @@ function loop(now) {
     spinPropeller(plane, flight.throttle, dt);
     cameras.update(camera, flight, plane, dt);
     hud.update(flight, mission, cameras.mode, dt);
+    if (cameras.mode === "cockpit") cockpit3d.update(flight, mission.fuel);
     if (mission.finished || mission.failed) endMission();
   } else if (gameState === "title") {
     // Slow orbit around the parked plane behind the title card.
