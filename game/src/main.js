@@ -134,15 +134,23 @@ window.addEventListener("resize", () => {
 });
 
 // --- Screenshot staging ---
+// Every staged shot presents the same Ring-1 approach moment, so the
+// distance readout comes from this one staged source for all four
+// shots (hud.js honours mission.stagedDistM when set; live gameplay
+// never sets it and always shows the real distance). The chase and
+// cockpit vantages below sit a real ~330 m from ring 1; the runway
+// and panorama vantages are composed for their subjects and present
+// the same approach readout, so the four shots agree with each other.
+const STAGED_RING_DIST_M = 330;
+
 function stageShot(name) {
   mission = createMission("ring");
   mission.score = 1500;
   mission.elapsed = 74;
   mission.fuel = 82;
   mission.objective = "Fly through the golden ring!";
-  // No hard-coded distance here: the HUD computes the live distance to the
-  // next ring from the staged position (see hud.js updateMissionMeta).
-  mission.detail = "Ring 1 of 10 — follow the gold ring";
+  mission.detail = "Ring 1 of 10 — follow the gold ring · " + STAGED_RING_DIST_M + " m";
+  mission.stagedDistM = STAGED_RING_DIST_M;
   buildMissionObjects(scene, mission);
   hud.show();
   hideScreens();
@@ -158,12 +166,16 @@ function stageShot(name) {
     flight.verticalSpeed = 1.2; // gentle climb, matches the slight nose-up pitch
     cameras.setMode("chase");
   } else if (name === "cockpit") {
-    // On final approach to Home Runway, panel lit, strip ahead below.
-    flight.position.set(28, 185, 720);
-    flight.heading = -0.04;
-    flight.pitch = -0.22; flight.roll = 0.03;
-    flight.speed = 48; flight.throttle = 0.45; flight.onGround = false;
-    flight.verticalSpeed = -10.5; // descent on approach, matches pitch/speed
+    // Level flight on approach to ring 1: the solid gold ring sits
+    // dead ahead through the windshield at the staged 330 m, panel
+    // lit, instruments stable (vertical speed 0 — the old final-
+    // approach staging read −2067 fpm, like a dive). Altitude 138
+    // puts the ring (centre y=150) clear above the glareshield.
+    flight.position.set(8, 138, -320);
+    flight.heading = 0;
+    flight.pitch = 0.01; flight.roll = 0.02;
+    flight.speed = 55; flight.throttle = 0.65; flight.onGround = false;
+    flight.verticalSpeed = 0; // level flight
     cameras.setMode("cockpit");
     refreshCockpit();
   } else if (name === "runway") {

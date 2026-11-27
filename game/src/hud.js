@@ -143,7 +143,13 @@ export function createHud() {
       if (mission.nextRing < total) {
         const p = RING_COURSE[mission.nextRing];
         _target.set(p.x, p.y, p.z);
-        setText(distVal, Math.round(flight.position.distanceTo(_target)) + " m");
+        // Screenshot staging (main.js stageShot) may pin one staged
+        // approach distance so all staged shots agree; live gameplay
+        // never sets stagedDistM and always shows the real distance.
+        const distM = mission.stagedDistM != null
+          ? mission.stagedDistM
+          : Math.round(flight.position.distanceTo(_target));
+        setText(distVal, distM + " m");
       } else {
         setText(distVal, "—");
       }

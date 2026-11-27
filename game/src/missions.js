@@ -3,8 +3,9 @@
 // Phase 4 (Ring Challenge) adds, on top of the plain gold/blue/green tori:
 //   - readable ring rotation: 4 marker beads on each rim orbit as the ring
 //     spins about the course axis (a bare torus spinning about its own
-//     symmetry axis would be invisible), plus a soft additive halo sprite
-//     on the active ring;
+//     symmetry axis would be invisible). The active ring is a thick solid
+//     gold torus — an earlier additive centre halo washed it out into a
+//     glowing blob, so the halo sprite is built but never shown;
 //   - a pooled particle burst at the ring centre on every pass;
 //   - WebAudio checkpoint sounds (two-note chime on pass, low blip on miss),
 //     created lazily on the first user gesture, fully guarded;
@@ -40,16 +41,21 @@ const MISS_FIRE_DIST = 140;      // recede past this (armed, no pass) => missed
 const PARTICLE_POOL = 160;       // pooled burst particles, allocated once
 const PARTICLES_PER_BURST = 40;
 
-const COL_GOLD = 0xffd75e;
+// Deep, saturated gold: the old pale 0xffd75e washed out to near-white
+// under ACES tone mapping, so the active ring read as a faint glow
+// instead of a solid gold target. This stays unmistakably gold at
+// screenshot distance.
+const COL_GOLD = 0xffb52e;
 const COL_BLUE = 0x4ec9ff;
 const COL_GREEN = 0x57e6a9;
 
-// Marker-bead tint: the ring colour lightened toward white so the orbiting
-// beads read against the torus tube of the same hue.
+// Marker-bead tint: the ring colour lightened only slightly toward
+// white, so the orbiting beads read as subtle markers on a solid ring
+// rather than white segments breaking the torus up.
 const _beadTint = new THREE.Color();
 const _white = new THREE.Color(0xffffff);
 function beadTint(hex) {
-  return _beadTint.setHex(hex).lerp(_white, 0.55).getHex();
+  return _beadTint.setHex(hex).lerp(_white, 0.12).getHex();
 }
 
 export function createMission(kind) {
@@ -259,8 +265,12 @@ function makeHaloTexture() {
 export function buildMissionObjects(scene, mission) {
   clearMissionObjects(scene, mission);
   if (mission.kind === "ring") {
-    const torusGeo = new THREE.TorusGeometry(RING_RADIUS, 3.2, 10, 28);
-    const beadGeo = new THREE.SphereGeometry(3.6, 10, 8);
+    // Thick torus tube (4.6) so the ring reads as a solid band, not a
+    // thin wire, from a few hundred metres out. Beads sit just proud
+    // of the tube (5.0) so the spin stays readable without segmenting
+    // the ring's silhouette.
+    const torusGeo = new THREE.TorusGeometry(RING_RADIUS, 4.6, 12, 36);
+    const beadGeo = new THREE.SphereGeometry(5.0, 10, 8);
     const haloTex = makeHaloTexture();
     RING_COURSE.forEach((p, i) => {
       const isNext = i === mission.nextRing;
@@ -292,14 +302,20 @@ export function buildMissionObjects(scene, mission) {
       }
       group.add(spinner);
 
-      // Glow halo at the centre — only shown on the active ring.
+      // Centre glow halo: kept in the scene graph (the pass-burst
+      // particles still use the same soft texture) but never shown.
+      // At 150 units wide the additive sprite filled the ring's hole
+      // with a white glare blob, so the active ring read as a small
+      // glowing sun instead of a solid gold target ring. The ring
+      // itself — thick gold torus, subtle beads, gentle pulse — is
+      // the marker now.
       const haloMat = new THREE.SpriteMaterial({
         map: haloTex, color: COL_GOLD, transparent: true, opacity: 0.4,
         depthWrite: false, blending: THREE.AdditiveBlending
       });
       const halo = new THREE.Sprite(haloMat);
       halo.scale.set(150, 150, 1);
-      halo.visible = isNext;
+      halo.visible = false;
       group.add(halo);
 
       group.userData = { torusMat, beadMat, spinner, halo, haloMat, phase: i * 0.8 };
@@ -421,7 +437,9 @@ export function updateMission(mission, flight, dt, hud) {
   }
 
   // Ring animation: every ring's beads orbit the rim; the active ring also
-  // pulses in scale and its halo breathes. No allocations in this loop.
+  // pulses gently in scale. (Its old centre halo sprite is never shown —
+  // see buildMissionObjects — so the opacity/scale writes below are
+  // harmless.) No allocations in this loop.
   if (mission.kind === "ring" && mission.rings.length) {
     mission.ringSpin += dt * 0.9;
     const pulse = Math.sin(mission.elapsed * 3);
@@ -452,7 +470,7 @@ function refreshRingColors(mission) {
     u.torusMat.opacity = opacity;
     u.beadMat.color.setHex(beadTint(color));
     u.beadMat.opacity = opacity;
-    u.halo.visible = i === mission.nextRing;
+    u.halo.visible = false; // centre glare stays off — see buildMissionObjects
     ring.scale.set(1, 1, 1);
   });
 }
